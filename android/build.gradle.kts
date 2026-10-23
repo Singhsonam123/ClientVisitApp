@@ -5,6 +5,14 @@ allprojects {
     }
 }
 
+// SSL Certificate configuration for Gradle wrapper
+tasks.register("configureSSL") {
+    doFirst {
+        System.setProperty("javax.net.ssl.trustStore", "")
+        System.setProperty("javax.net.ssl.trustStorePassword", "")
+    }
+}
+
 val newBuildDir: Directory =
     rootProject.layout.buildDirectory
         .dir("../../build")

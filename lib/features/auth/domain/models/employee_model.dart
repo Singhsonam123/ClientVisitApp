@@ -1,5 +1,56 @@
 import 'package:equatable/equatable.dart';
 
+/// Enum for user roles
+enum UserRole {
+  admin,
+  superAdmin,
+  employee,
+  guest,
+}
+
+extension UserRoleExtension on UserRole {
+  String get displayName {
+    switch (this) {
+      case UserRole.admin:
+        return 'Admin';
+      case UserRole.superAdmin:
+        return 'Super Admin';
+      case UserRole.employee:
+        return 'Employee';
+      case UserRole.guest:
+        return 'Guest';
+    }
+  }
+
+  String get value {
+    switch (this) {
+      case UserRole.admin:
+        return 'admin';
+      case UserRole.superAdmin:
+        return 'super_admin';
+      case UserRole.employee:
+        return 'employee';
+      case UserRole.guest:
+        return 'guest';
+    }
+  }
+
+  static UserRole fromString(String value) {
+    switch (value.toLowerCase()) {
+      case 'admin':
+        return UserRole.admin;
+      case 'super_admin':
+        return UserRole.superAdmin;
+      case 'employee':
+        return UserRole.employee;
+      case 'guest':
+        return UserRole.guest;
+      default:
+        return UserRole.employee;
+    }
+  }
+}
+
 /// Represents a logged-in employee.
 class EmployeeModel extends Equatable {
   final String id;
@@ -8,6 +59,7 @@ class EmployeeModel extends Equatable {
   final String department;
   final String? avatarUrl;
   final bool isAdmin;
+  final UserRole role;
 
   const EmployeeModel({
     required this.id,
@@ -16,6 +68,7 @@ class EmployeeModel extends Equatable {
     required this.department,
     this.avatarUrl,
     this.isAdmin = false,
+    this.role = UserRole.employee,
   });
 
   EmployeeModel copyWith({
@@ -25,6 +78,7 @@ class EmployeeModel extends Equatable {
     String? department,
     String? avatarUrl,
     bool? isAdmin,
+    UserRole? role,
   }) {
     return EmployeeModel(
       id: id ?? this.id,
@@ -33,6 +87,7 @@ class EmployeeModel extends Equatable {
       department: department ?? this.department,
       avatarUrl: avatarUrl ?? this.avatarUrl,
       isAdmin: isAdmin ?? this.isAdmin,
+      role: role ?? this.role,
     );
   }
 
@@ -43,6 +98,7 @@ class EmployeeModel extends Equatable {
         'department': department,
         'avatarUrl': avatarUrl,
         'isAdmin': isAdmin,
+        'role': role.value,
       };
 
   factory EmployeeModel.fromMap(Map<String, dynamic> map) => EmployeeModel(
@@ -52,10 +108,11 @@ class EmployeeModel extends Equatable {
         department: map['department'] as String,
         avatarUrl: map['avatarUrl'] as String?,
         isAdmin: map['isAdmin'] as bool? ?? false,
+        role: UserRoleExtension.fromString(map['role'] as String? ?? 'employee'),
       );
 
   @override
-  List<Object?> get props => [id, name, email, department, avatarUrl, isAdmin];
+  List<Object?> get props => [id, name, email, department, avatarUrl, isAdmin, role];
 }
 
 /// Static list of mock employees for demo purposes.

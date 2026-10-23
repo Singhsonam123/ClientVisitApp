@@ -1,14 +1,14 @@
-/// Global constants for the Shutterfly Agenda app.
+/// Global constants for the Team Agenda app.
 class AppConstants {
   AppConstants._();
 
   // ── App Info ─────────────────────────────────────────────────────────
-  static const String appName = 'Shutterfly Connect';
+  static const String appName = 'Team Connect';
   static const String appVersion = '1.0.0';
   static const String companyName = 'Shutterfly';
 
   // ── Event Info ────────────────────────────────────────────────────────
-  static const String eventName = 'Shutterfly Team Connect';
+  static const String eventName = 'Team Connect';
   static const String eventDate = 'August 2026';
   static const String eventLocation = 'Shutterfly Office';
 
@@ -20,6 +20,8 @@ class AppConstants {
   static const String prefKeyEmployeeDept  = 'employee_dept';
   /// Bearer token returned by POST /auth/signin
   static const String prefKeyAuthToken     = 'auth_token';
+  /// Refresh token for obtaining new access tokens
+  static const String prefKeyRefreshToken  = 'refresh_token';
   /// Album ID of the shared event album (auto-created on first upload)
   static const String prefKeyAlbumId       = 'event_album_id';
   static const String prefKeyVotedFor      = 'voted_for';

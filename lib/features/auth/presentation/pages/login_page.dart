@@ -4,8 +4,10 @@ import 'package:flutter_animate/flutter_animate.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_text_styles.dart';
 import '../../../../core/constants/app_constants.dart';
+import '../../../../core/utils/app_toast.dart';
 import '../bloc/auth_bloc.dart';
 import 'signup_page.dart';
+import '../../../splash/presentation/pages/welcome_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -15,11 +17,24 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _formKey      = GlobalKey<FormState>();
   final _emailCtrl    = TextEditingController();
   final _passwordCtrl = TextEditingController();
   bool _obscure    = true;
   bool _isLoading  = false;
+
+  void _guestLogin() {
+    // Navigate to welcome screen as guest
+    context.read<AuthBloc>().add(const AuthGuestRequested());
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => WelcomePage(
+          onComplete: () {
+            Navigator.of(context).pushReplacementNamed('/home');
+          },
+        ),
+      ),
+    );
+  }
 
   @override
   void dispose() {
@@ -29,12 +44,21 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _submit() {
-    if (_formKey.currentState?.validate() ?? false) {
-      context.read<AuthBloc>().add(AuthLoginRequested(
-            email:    _emailCtrl.text.trim(),
-            password: _passwordCtrl.text,
-          ));
+    // Get email and password from input fields
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text.trim();
+
+    // Validate inputs
+    if (email.isEmpty || password.isEmpty) {
+      AppToast.showError(context, 'Please enter email and password');
+      return;
     }
+
+    // Use clean architecture login via use case
+    context.read<AuthBloc>().add(AuthCleanLoginRequested(
+          email: email,
+          password: password,
+        ));
   }
 
   void _goToSignup() {
@@ -51,19 +75,22 @@ class _LoginPageState extends State<LoginPage> {
         listener: (context, state) {
           if (state is AuthLoading) {
             setState(() => _isLoading = true);
+          } else if (state is AuthFailure) {
+            setState(() => _isLoading = false);
+            // Show error message
+            Future.delayed(const Duration(milliseconds: 100), () {
+              if (mounted) {
+                AppToast.showError(context, state.message);
+              }
+            });
+          } else if (state is AuthAuthenticated) {
+            setState(() => _isLoading = false);
+            // Navigation is handled by main.dart
+          } else if (state is AuthUnauthenticated) {
+            setState(() => _isLoading = false);
+            // Allow user to retry login
           } else {
             setState(() => _isLoading = false);
-          }
-          if (state is AuthFailure) {
-            ScaffoldMessenger.of(context)
-              ..hideCurrentSnackBar()
-              ..showSnackBar(SnackBar(
-                content: Text(state.message),
-                backgroundColor: AppColors.error,
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
-              ));
           }
         },
         child: Stack(
@@ -109,7 +136,7 @@ class _LoginPageState extends State<LoginPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const SizedBox(height: 40),
+                    const SizedBox(height: 20),
                     // Logo
                     Center(
                       child: Container(
@@ -143,7 +170,7 @@ class _LoginPageState extends State<LoginPage> {
                             textAlign: TextAlign.center)
                         .animate()
                         .fadeIn(delay: 400.ms, duration: 600.ms),
-                    const SizedBox(height: 48),
+                    const SizedBox(height: 32),
 
                     // Form card — animated once on mount, not on state change
                     Container(
@@ -159,86 +186,81 @@ class _LoginPageState extends State<LoginPage> {
                         ],
                       ),
                       padding: const EdgeInsets.all(AppConstants.paddingL),
-                      child: Form(
-                        key: _formKey,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Text('Welcome Back 👋',
-                                style: AppTextStyles.headlineSmall,
-                                textAlign: TextAlign.center),
-                            const SizedBox(height: 4),
-                            Text('Sign in with your email',
-                                style: AppTextStyles.bodySmall,
-                                textAlign: TextAlign.center),
-                            const SizedBox(height: 28),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Text('Welcome Back 👋',
+                              style: AppTextStyles.headlineSmall,
+                              textAlign: TextAlign.center),
+                          const SizedBox(height: 4),
+                          Text('Sign in with your email',
+                              style: AppTextStyles.bodySmall,
+                              textAlign: TextAlign.center),
+                          
+                          const SizedBox(height: 28),
 
-                            // Email field
-                            TextFormField(
-                              controller: _emailCtrl,
-                              keyboardType: TextInputType.emailAddress,
-                              decoration: const InputDecoration(
-                                labelText: 'Email',
-                                hintText: 'you@shutterfly.com',
-                                prefixIcon: Icon(Icons.email_outlined),
-                              ),
-                              textInputAction: TextInputAction.next,
-                              validator: (v) {
-                                if (v == null || v.isEmpty) {
-                                  return 'Please enter your email';
-                                }
-                                if (!RegExp(r'^[^@]+@[^@]+\.[^@]+')
-                                    .hasMatch(v)) {
-                                  return 'Please enter a valid email';
-                                }
-                                return null;
-                              },
+                          // Email field
+                          TextField(
+                            controller: _emailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            decoration: const InputDecoration(
+                              labelText: 'Email',
+                              hintText: 'you@shutterfly.com',
+                              prefixIcon: Icon(Icons.email_outlined),
                             ),
-                            const SizedBox(height: 16),
+                            textInputAction: TextInputAction.next,
+                          ),
+                          const SizedBox(height: 16),
 
-                            // Password field
-                            TextFormField(
-                              controller: _passwordCtrl,
-                              obscureText: _obscure,
-                              decoration: InputDecoration(
-                                labelText: 'Password',
-                                hintText: '••••••••',
-                                prefixIcon:
-                                    const Icon(Icons.lock_outline_rounded),
-                                suffixIcon: IconButton(
-                                  icon: Icon(_obscure
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined),
-                                  onPressed: () =>
-                                      setState(() => _obscure = !_obscure),
-                                ),
-                              ),
-                              textInputAction: TextInputAction.done,
-                              onFieldSubmitted: (_) => _submit(),
-                              validator: (v) => (v == null || v.isEmpty)
-                                  ? 'Please enter your password'
-                                  : null,
-                            ),
-                            const SizedBox(height: 28),
-
-                            // Sign In button
-                            SizedBox(
-                              height: 52,
-                              child: ElevatedButton(
-                                onPressed: _isLoading ? null : _submit,
-                                child: _isLoading
-                                    ? const SizedBox(
-                                        width: 24,
-                                        height: 24,
-                                        child: CircularProgressIndicator(
-                                            strokeWidth: 2.5,
-                                            color: AppColors.textOnPrimary),
-                                      )
-                                    : const Text('Sign In'),
+                          // Password field
+                          TextField(
+                            controller: _passwordCtrl,
+                            obscureText: _obscure,
+                            decoration: InputDecoration(
+                              labelText: 'Password',
+                              hintText: '••••••••',
+                              prefixIcon:
+                                  const Icon(Icons.lock_outline_rounded),
+                              suffixIcon: IconButton(
+                                icon: Icon(_obscure
+                                    ? Icons.visibility_outlined
+                                    : Icons.visibility_off_outlined),
+                                onPressed: () =>
+                                    setState(() => _obscure = !_obscure),
                               ),
                             ),
-                          ],
-                        ),
+                            textInputAction: TextInputAction.done,
+                            onSubmitted: (_) => _submit(),
+                          ),
+                          const SizedBox(height: 28),
+
+                          // Guest Login button
+                          SizedBox(
+                            height: 20,
+                            child: GestureDetector(
+                              onTap: _guestLogin,
+                              child: const Center(child: Text('Continue as Guest',style: TextStyle(color: Color.fromARGB(255, 230, 108, 8), fontSize: 14, fontWeight: FontWeight.w500))),
+                            ),
+                          ),
+                          const SizedBox(height: 15),
+
+                          // Continue button
+                          SizedBox(
+                            height: 52,
+                            child: ElevatedButton(
+                              onPressed: _isLoading ? null : _submit,
+                              child: _isLoading
+                                  ? const SizedBox(
+                                      width: 24,
+                                      height: 24,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2.5,
+                                          color: AppColors.textOnPrimary),
+                                    )
+                                  : const Text('Continue'),
+                            ),
+                          ),
+                        ],
                       ),
                     )
                         .animate()

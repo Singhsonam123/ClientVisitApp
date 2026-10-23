@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'app_colors.dart';
 import 'app_text_styles.dart';
 
-/// Main theme configuration for the Shutterfly Agenda app.
+/// Main theme configuration for the Team Agenda app.
 class AppTheme {
   AppTheme._();
 

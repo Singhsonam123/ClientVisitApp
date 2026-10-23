@@ -1,4 +1,4 @@
-// Shutterfly Agenda - Widget Tests
+// Team Agenda - Widget Tests
 import 'package:flutter_test/flutter_test.dart';
 
 void main() {

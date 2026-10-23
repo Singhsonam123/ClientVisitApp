@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 
-/// Centralized text styles for the Shutterfly Agenda app.
+/// Centralized text styles for the Team Agenda app.
 class AppTextStyles {
   AppTextStyles._();
 

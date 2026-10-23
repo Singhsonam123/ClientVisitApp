@@ -6,7 +6,7 @@
 -keep class io.flutter.** { *; }
 -keep class io.flutter.plugins.** { *; }
 
-# Keep Shutterfly Connect classes
+# Keep Team Connect classes
 -keep class com.shutterfly.connect.** { *; }
 
 # Kotlin

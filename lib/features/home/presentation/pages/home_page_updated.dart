@@ -1,0 +1,398 @@
+// import 'package:flutter/material.dart';
+// import 'package:flutter_bloc/flutter_bloc.dart';
+// import '../../../../core/theme/app_colors.dart';
+// import '../../../../core/utils/app_toast.dart';
+// import '../../../../core/utils/logout_dialog.dart';
+// import '../../../gallery/presentation/pages/gallery_page.dart';
+// import '../../../agenda/presentation/pages/agenda_page.dart';
+// import '../../../potluck/presentation/pages/potluck_page.dart';
+// import '../../../sweets/presentation/pages/sweets_page.dart';
+// import '../../../employees/presentation/pages/configure_page.dart';
+// import '../../../auth/data/auth_repository.dart';
+// import '../../../auth/domain/models/employee_model.dart';
+// import '../../../auth/presentation/bloc/auth_bloc.dart';
+// import '../../../auth/presentation/pages/profile_page.dart';
+// import '../../../settings/data/settings_repository.dart';
+// import '../../../settings/presentation/bloc/settings_bloc.dart';
+// import '../../../settings/presentation/pages/settings_page.dart';
+// import '../../../projects/data/datasources/projects_remote_datasource.dart';
+// import '../../../projects/data/models/project_model.dart';
+// import 'dashboard_page.dart';
+
+// class HomePage extends StatefulWidget {
+//   const HomePage({super.key});
+
+//   @override
+//   State<HomePage> createState() => _HomePageState();
+// }
+
+// class _HomePageState extends State<HomePage> {
+//   int _currentIndex = 0;
+//   List<ProjectModel> _projects = [];
+//   ProjectModel? _selectedProject;
+//   bool _isLoadingProjects = false;
+
+//   @override
+//   void initState() {
+//     super.initState();
+//     _loadProjects();
+//   }
+
+//   List<_NavItem> _getNavItems(bool isSuperAdmin) {
+//     if (isSuperAdmin) {
+//       return const [
+//         _NavItem(icon: Icons.home_rounded, label: 'Project'),
+//         _NavItem(icon: Icons.admin_panel_settings_rounded, label: 'Admin'),
+//       ];
+//     } else {
+//       return const [
+//         _NavItem(icon: Icons.home_rounded, label: 'Home'),
+//         _NavItem(icon: Icons.calendar_month_rounded, label: 'Agenda'),
+//         _NavItem(icon: Icons.restaurant_menu_rounded, label: 'Potluck'),
+//         _NavItem(icon: Icons.cake_rounded, label: 'Sweets'),
+//         _NavItem(icon: Icons.admin_panel_settings_rounded, label: 'Admin'),
+//       ];
+//     }
+//   }
+
+//   List<Widget> _getPages(bool isSuperAdmin) {
+//     final dashboardPage = DashboardPage(
+//       selectedProject: _selectedProject,
+//       onLogoutTap: () => _handleLogout(context),
+//       onProfileTap: () => _openProfile(context),
+//       onProjectTap: () => _loadProjects(),
+//     );
+
+//     final configurePage = ConfigurePage(
+//       key: ValueKey(_selectedProject?.id ?? 'no-project'),
+//       projectId: _selectedProject?.id,
+//     );
+
+//     if (isSuperAdmin) {
+//       return [
+//         dashboardPage,
+//         configurePage,
+//       ];
+//     } else {
+//       return [
+//         dashboardPage,
+//         const AgendaPage(),
+//         const PotluckPage(),
+//         const SweetsPage(),
+//         configurePage,
+//       ];
+//     }
+//   }
+
+//   Future<void> _loadProjects() async {
+//     final authState = context.read<AuthBloc>().state;
+//     if (authState is! AuthAuthenticated) return;
+
+//     setState(() => _isLoadingProjects = true);
+//     try {
+//       final dataSource = ProjectsRemoteDataSourceImpl();
+//       final projects = await dataSource.listProjects();
+//       setState(() {
+//         _projects = projects;
+//         if (projects.isNotEmpty) {
+//           _selectedProject = projects.first;
+//         }
+//       });
+//     } catch (e) {
+//       if (mounted) {
+//         AppToast.showError(context, 'Failed to load projects');
+//       }
+//     } finally {
+//       setState(() => _isLoadingProjects = false);
+//     }
+//   }
+
+//   Future<void> _createNewProject() async {
+//     final authState = context.read<AuthBloc>().state;
+//     if (authState is! AuthAuthenticated) return;
+
+//     // Check if user is super admin
+//     if (authState.employee.role.displayName != 'super_admin') {
+//       AppToast.showError(context, 'Only Super Admin can create projects');
+//       return;
+//     }
+
+//     // Show create project dialog
+//     if (!mounted) return;
+//     _showCreateProjectDialog();
+//   }
+
+//   void _showCreateProjectDialog() {
+//     final nameController = TextEditingController();
+//     final descriptionController = TextEditingController();
+
+//     showDialog(
+//       context: context,
+//       builder: (context) => AlertDialog(
+//         title: const Text('Create New Project'),
+//         content: SingleChildScrollView(
+//           child: Column(
+//             mainAxisSize: MainAxisSize.min,
+//             children: [
+//               TextField(
+//                 controller: nameController,
+//                 decoration: const InputDecoration(
+//                   labelText: 'Project Name',
+//                   hintText: 'Enter project name',
+//                 ),
+//               ),
+//               const SizedBox(height: 16),
+//               TextField(
+//                 controller: descriptionController,
+//                 decoration: const InputDecoration(
+//                   labelText: 'Description',
+//                   hintText: 'Enter project description',
+//                 ),
+//                 maxLines: 3,
+//               ),
+//             ],
+//           ),
+//         ),
+//         actions: [
+//           TextButton(
+//             onPressed: () => Navigator.pop(context),
+//             child: const Text('Cancel'),
+//           ),
+//           ElevatedButton(
+//             onPressed: () async {
+//               final name = nameController.text.trim();
+//               final description = descriptionController.text.trim();
+
+//               if (name.isEmpty || description.isEmpty) {
+//                 AppToast.showError(context, 'Please fill all fields');
+//                 return;
+//               }
+
+//               try {
+//                 final dataSource = ProjectsRemoteDataSourceImpl();
+//                 final newProject = await dataSource.createProject(
+//                   name: name,
+//                   description: description,
+//                 );
+
+//                 if (mounted) {
+//                   Navigator.pop(context);
+//                   setState(() {
+//                     _projects.add(newProject);
+//                     _selectedProject = newProject;
+//                   });
+//                   AppToast.showSuccess(context, 'Project created successfully');
+//                 }
+//               } catch (e) {
+//                 if (mounted) {
+//                   AppToast.showError(context, 'Failed to create project');
+//                 }
+//               }
+//             },
+//             child: const Text('Create'),
+//           ),
+//         ],
+//       ),
+//     );
+//   }
+
+//   @override
+//   Widget build(BuildContext context) {
+//     return BlocBuilder<AuthBloc, AuthState>(
+//       builder: (context, authState) {
+//         final isSuperAdmin = authState is AuthAuthenticated &&
+//             authState.employee.role == UserRole.superAdmin;
+        
+//         if (authState is AuthAuthenticated) {
+//           print('[HOME] User role: ${authState.employee.role}');
+//           print('[HOME] Is Super Admin: $isSuperAdmin');
+//         }
+        
+//         final navItems = _getNavItems(isSuperAdmin);
+//         final pages = _getPages(isSuperAdmin);
+        
+//         // Reset current index if it exceeds the available pages
+//         if (_currentIndex >= pages.length) {
+//           WidgetsBinding.instance.addPostFrameCallback((_) {
+//             setState(() => _currentIndex = 0);
+//           });
+//         }
+
+//         return Scaffold(
+//           appBar: AppBar(
+//             title: const Text('Team Agenda'),
+//             centerTitle: true,
+//             elevation: 0,
+//             backgroundColor: AppColors.primary,
+//             foregroundColor: Colors.white,
+//             bottom: PreferredSize(
+//               preferredSize: const Size.fromHeight(60),
+//               child: Padding(
+//                 padding: const EdgeInsets.all(12),
+//                 child: Row(
+//                   children: [
+//                     Expanded(
+//                       child: _isLoadingProjects
+//                           ? const SizedBox(
+//                               height: 40,
+//                               child: Center(
+//                                 child: SizedBox(
+//                                   width: 20,
+//                                   height: 20,
+//                                   child: CircularProgressIndicator(
+//                                     strokeWidth: 2,
+//                                     valueColor: AlwaysStoppedAnimation<Color>(
+//                                       Colors.white,
+//                                     ),
+//                                   ),
+//                                 ),
+//                               ),
+//                             )
+//                           : DropdownButton<ProjectModel>(
+//                               isExpanded: true,
+//                               value: _selectedProject,
+//                               hint: const Text(
+//                                 'Select Project',
+//                                 style: TextStyle(color: Colors.white70),
+//                               ),
+//                               dropdownColor: AppColors.primary,
+//                               style: const TextStyle(color: Colors.white),
+//                               items: _projects
+//                                   .map((project) => DropdownMenuItem(
+//                                         value: project,
+//                                         child: Text(project.name),
+//                                       ))
+//                                   .toList(),
+//                               onChanged: (project) {
+//                                 setState(() => _selectedProject = project);
+//                               },
+//                             ),
+//                     ),
+//                     const SizedBox(width: 8),
+//                     if (isSuperAdmin)
+//                       IconButton(
+//                         icon: const Icon(Icons.add_circle_outline),
+//                         tooltip: 'Add Project',
+//                         onPressed: _createNewProject,
+//                       ),
+//                   ],
+//                 ),
+//               ),
+//             ),
+//             actions: [
+//               Padding(
+//                 padding: const EdgeInsets.only(right: 8),
+//                 child: IconButton(
+//                   icon: const Icon(Icons.person_rounded),
+//                   tooltip: 'Profile',
+//                   onPressed: () => _openProfile(context),
+//                 ),
+//               ),
+//               Padding(
+//                 padding: const EdgeInsets.only(right: 8),
+//                 child: IconButton(
+//                   icon: const Icon(Icons.settings_rounded),
+//                   tooltip: 'Settings',
+//                   onPressed: () => _openSettings(context),
+//                 ),
+//               ),
+//               Padding(
+//                 padding: const EdgeInsets.only(right: 16),
+//                 child: IconButton(
+//                   icon: const Icon(Icons.logout_rounded),
+//                   tooltip: 'Logout',
+//                   onPressed: () => _handleLogout(context),
+//                 ),
+//               ),
+//             ],
+//           ),
+//           body: IndexedStack(
+//             index: _currentIndex.clamp(0, pages.length - 1),
+//             children: pages,
+//           ),
+//           bottomNavigationBar: Container(
+//             decoration: const BoxDecoration(
+//               boxShadow: [
+//                 BoxShadow(
+//                   color: AppColors.shadowMedium,
+//                   blurRadius: 16,
+//                   offset: Offset(0, -4),
+//                 ),
+//               ],
+//             ),
+//             child: BottomNavigationBar(
+//               currentIndex: _currentIndex.clamp(0, navItems.length - 1),
+//               onTap: (index) => setState(() => _currentIndex = index),
+//               type: BottomNavigationBarType.fixed,
+//               selectedItemColor: AppColors.primary,
+//               unselectedItemColor: AppColors.textHint,
+//               selectedLabelStyle: const TextStyle(
+//                 fontSize: 11,
+//                 fontWeight: FontWeight.w700,
+//               ),
+//               unselectedLabelStyle: const TextStyle(fontSize: 11),
+//               items: navItems
+//                   .map((item) => BottomNavigationBarItem(
+//                         icon: Icon(item.icon),
+//                         label: item.label,
+//                       ))
+//                   .toList(),
+//             ),
+//           ),
+//         );
+//       },
+//     );
+//   }
+
+//   Future<void> _openProfile(BuildContext context) async {
+//     final authState = context.read<AuthBloc>().state;
+
+//     if (authState is! AuthAuthenticated) {
+//       return;
+//     }
+
+//     if (!context.mounted) return;
+
+//     Navigator.of(context).push(
+//       MaterialPageRoute(
+//         builder: (context) => ProfilePage(
+//           employee: authState.employee,
+//         ),
+//       ),
+//     );
+//   }
+
+//   Future<void> _openSettings(BuildContext context) async {
+//     final authRepository = context.read<AuthRepository>();
+//     final selectedRole = authRepository.selectedRole?.displayName ?? 'Guest';
+
+//     if (!context.mounted) return;
+
+//     Navigator.of(context).push(
+//       MaterialPageRoute(
+//         builder: (context) => BlocProvider(
+//           create: (context) => SettingsBloc(
+//             context.read<SettingsRepository>(),
+//           ),
+//           child: SettingsPage(
+//             userRole: selectedRole,
+//           ),
+//         ),
+//       ),
+//     );
+//   }
+
+//   Future<void> _handleLogout(BuildContext context) async {
+//     final confirmed = await LogoutDialog.show(context);
+//     if (confirmed && mounted) {
+//       context.read<AuthBloc>().add(const AuthCleanLogoutRequested());
+//     }
+//   }
+// }
+
+// class _NavItem {
+//   final IconData icon;
+//   final String label;
+
+//   const _NavItem({required this.icon, required this.label});
+// }

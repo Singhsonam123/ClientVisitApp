@@ -1,99 +1,116 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'core/network/api_client.dart';
 import 'core/theme/app_theme.dart';
-import 'core/constants/app_constants.dart';
+import 'core/utils/toast_utils.dart';
 import 'features/auth/data/auth_repository.dart';
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/pages/login_page.dart';
-import 'features/gallery/data/gallery_repository.dart';
-import 'features/gallery/presentation/bloc/gallery_bloc.dart';
-import 'features/voting/data/voting_repository.dart';
-import 'features/voting/presentation/bloc/voting_bloc.dart';
+import 'features/auth/presentation/pages/splash_screen.dart';
 import 'features/home/presentation/pages/home_page.dart';
-import 'features/splash/presentation/pages/splash_page.dart';
-import 'features/splash/presentation/pages/welcome_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  SystemChrome.setPreferredOrientations([
-    DeviceOrientation.portraitUp,
-    DeviceOrientation.portraitDown,
-  ]);
-  final prefs = await SharedPreferences.getInstance();
-  final authRepo    = AuthRepository(prefs);
-  final galleryRepo = GalleryRepository(prefs);
-  runApp(ShutterflyApp(authRepo: authRepo, galleryRepo: galleryRepo));
+  runApp(const MyApp());
 }
 
-class ShutterflyApp extends StatelessWidget {
-  final AuthRepository  authRepo;
-  final GalleryRepository galleryRepo;
-  const ShutterflyApp({super.key, required this.authRepo, required this.galleryRepo});
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final votingRepo = VotingRepository();
-    return MultiBlocProvider(
-      providers: [
-        BlocProvider<AuthBloc>(
-          create: (_) => AuthBloc(authRepo)..add(const AuthCheckRequested()),
-        ),
-        BlocProvider<GalleryBloc>(
-          create: (_) => GalleryBloc(galleryRepo),
-        ),
-        BlocProvider<VotingBloc>(
-          create: (_) => VotingBloc(votingRepo),
-        ),
-      ],
-      child: MaterialApp(
-        title: AppConstants.appName,
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        home: const _AppRouter(),
-      ),
-    );
-  }
-}
+    return MaterialApp(
+      title: 'Client Visit App',
+      theme: AppTheme.lightTheme,
+      home: FutureBuilder<SharedPreferences>(
+        future: SharedPreferences.getInstance(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
 
-class _AppRouter extends StatefulWidget {
-  const _AppRouter();
+          final prefs = snapshot.data!;
+          final authRepository = AuthRepository(prefs);
+          final authBloc = AuthBloc(authRepository);
 
-  @override
-  State<_AppRouter> createState() => _AppRouterState();
-}
+          // Set the session expired callback in ApiClient
+          // This will be called when token refresh fails
+          ApiClient.setOnSessionExpired(() {
+            print('[MAIN] Session expired callback triggered');
+            authBloc.add(const SessionExpiredEvent());
+          });
 
-class _AppRouterState extends State<_AppRouter> {
-  /// Tracks whether the welcome screen has been fully shown.
-  bool _welcomeShown = false;
-
-  @override
-  Widget build(BuildContext context) {
-    return BlocBuilder<AuthBloc, AuthState>(
-      builder: (context, state) {
-        // Show splash while auth state is being determined
-        if (state is AuthInitial || state is AuthLoading) {
-          return const SplashPage();
-        }
-
-        // Show welcome screen once after splash resolves
-        if (!_welcomeShown) {
-          return WelcomePage(
-            onComplete: () => setState(() => _welcomeShown = true),
+          return BlocProvider(
+            create: (context) => authBloc
+              ..add(const AuthCheckRequested()),
+            child: const AppRouter(),
           );
-        }
-
-        // Unauthenticated users (and post-signup) see the login page.
-        if (state is AuthUnauthenticated ||
-            state is AuthFailure ||
-            state is AuthSignupSuccess) {
-          return const LoginPage();
-        }
-
-        // Authenticated users go to the home screen.
-        return const HomePage();
-      },
+        },
+      ),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
+
+class AppRouter extends StatefulWidget {
+   const AppRouter({super.key});
+
+   @override
+   State<AppRouter> createState() => _AppRouterState();
+ }
+
+ class _AppRouterState extends State<AppRouter> {
+   @override
+   Widget build(BuildContext context) {
+     return BlocListener<AuthBloc, AuthState>(
+       listener: (context, state) {
+         // Handle session expired state
+         if (state is AuthSessionExpired) {
+           // Show session expired toast
+           ToastUtils.showErrorToast(
+             context,
+             'Session expired, please login again',
+             duration: const Duration(seconds: 4),
+           );
+         }
+       },
+       child: BlocBuilder<AuthBloc, AuthState>(
+         buildWhen: (previous, current) {
+           // Only rebuild for state changes that matter for navigation
+           // Don't rebuild for AuthLoading (let login page handle its own loading state)
+           if (current is AuthLoading) {
+             return false;
+           }
+           return true;
+         },
+         builder: (context, state) {
+           // Show splash screen initially
+           if (state is AuthInitial) {
+             return const SplashScreen();
+           }
+
+           // If authenticated, show home
+           if (state is AuthAuthenticated) {
+             return const HomePage();
+           }
+
+           // If session expired, show login
+           if (state is AuthSessionExpired) {
+             return const LoginPage();
+           }
+
+           // If unauthenticated, show login
+           if (state is AuthUnauthenticated) {
+             return const LoginPage();
+           }
+
+           // Default to login
+           return const LoginPage();
+         },
+       ),
+     );
+   }
+ }

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// Centralized color palette for the Shutterfly Agenda app.
+/// Centralized color palette for the Team Agenda app.
 /// Uses a warm, festive Indian celebration theme.
 class AppColors {
   AppColors._();

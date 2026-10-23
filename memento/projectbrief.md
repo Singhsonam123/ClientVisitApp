@@ -1,4 +1,4 @@
-# Project Brief — Shutterfly Agenda
+# Project Brief — Team Agenda
 
 ## Project Name
 Shutterfly Annual Celebration — Event App
