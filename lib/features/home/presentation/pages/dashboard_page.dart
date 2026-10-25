@@ -14,12 +14,18 @@ import '../../../projects/data/models/project_model.dart';
 // Dynamic imports — gallery commented out until backend is connected:
 // import '../../../gallery/presentation/pages/gallery_page.dart';
 import '../../../voting/presentation/pages/voting_page.dart';
+import '../widgets/dashboard_top_bar.dart';
 
 class DashboardPage extends StatelessWidget {
   final ProjectModel? selectedProject;
   final VoidCallback onProjectTap;
   final VoidCallback onProfileTap;
   final VoidCallback onLogoutTap;
+  final bool isSuperAdmin;
+  final List<ProjectModel> projects;
+  final Function(ProjectModel?) onProjectChanged;
+  final VoidCallback onAddProject;
+  final String subtitle;
 
   const DashboardPage({
     super.key,
@@ -27,6 +33,11 @@ class DashboardPage extends StatelessWidget {
     required this.onProjectTap,
     required this.onProfileTap,
     required this.onLogoutTap,
+    this.isSuperAdmin = false,
+    this.projects = const [],
+    required this.onProjectChanged,
+    required this.onAddProject,
+    this.subtitle = 'Team Connect',
   });
 
   @override
@@ -50,140 +61,17 @@ class DashboardPage extends StatelessWidget {
             expandedHeight: 230,
             pinned: true,
             flexibleSpace: FlexibleSpaceBar(
-              background: Container(
-                decoration:
-                    const BoxDecoration(gradient: AppColors.festiveGradient),
-                child: SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Text(
-                          '$greeting! 👋',
-                          style: AppTextStyles.headlineMedium
-                              .copyWith(color: AppColors.textOnPrimary),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          AppConstants.eventName,
-                          style: AppTextStyles.bodyMedium.copyWith(
-                              color: AppColors.textOnPrimary.withOpacity(0.85)),
-                        ),
-                        const SizedBox(height: 8),
-                        // Container(
-                        //   padding: const EdgeInsets.symmetric(
-                        //       horizontal: 10, vertical: 4),
-                        //   decoration: BoxDecoration(
-                        //     color: AppColors.gold.withOpacity(0.25),
-                        //     borderRadius: BorderRadius.circular(12),
-                        //     border: Border.all(
-                        //         color: AppColors.gold.withOpacity(0.6)),
-                        //   ),
-                        //   child: Text(
-                        //     '🎉 ${AppConstants.eventDate}  •  ${AppConstants.eventLocation}',
-                        //     style: AppTextStyles.labelSmall
-                        //         .copyWith(color: AppColors.gold),
-                        //   ),
-                        // ),
-                        const SizedBox(height: 15),
-                        // Project selector and user menu
-                        Row(
-                          children: [
-                            Expanded(
-                              child: GestureDetector(
-                                onTap: onProjectTap,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 8),
-                                  decoration: BoxDecoration(
-                                    border: Border.all(
-                                        color: Colors.white30),
-                                    borderRadius:
-                                        BorderRadius.circular(4),
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment
-                                            .spaceBetween,
-                                    children: [
-                                      Expanded(
-                                        child: Text(
-                                          selectedProject?.name ?? 'Select Project',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                          overflow: TextOverflow.ellipsis,
-                                          maxLines: 1,
-                                        ),
-                                      ),
-                                      const Icon(
-                                          Icons.arrow_drop_down,
-                                          color: Colors.white70),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            // User menu button
-                            // PopupMenuButton<String>(
-                            //   icon: const CircleAvatar(
-                            //     backgroundColor: Colors.white24,
-                            //     child: Icon(Icons.person_rounded,
-                            //         color: Colors.white),
-                            //   ),
-                            //   onSelected: (value) {
-                            //     if (value == 'profile') {
-                            //       onProfileTap();
-                            //     } else if (value == 'logout') {
-                            //       onLogoutTap();
-                            //     }
-                            //   },
-                            //   itemBuilder: (BuildContext context) => [
-                            //     const PopupMenuItem<String>(
-                            //       value: 'profile',
-                            //       child: Row(
-                            //         children: [
-                            //           Icon(Icons.person_outline),
-                            //           SizedBox(width: 8),
-                            //           Text('Profile'),
-                            //         ],
-                            //       ),
-                            //     ),
-                            //     const PopupMenuItem<String>(
-                            //       value: 'logout',
-                            //       child: Row(
-                            //         children: [
-                            //           Icon(Icons.logout_rounded),
-                            //           SizedBox(width: 8),
-                            //           Text('Logout'),
-                            //         ],
-                            //       ),
-                            //     ),
-                            //   ],
-                            // ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
+              background: DashboardTopBar(
+                greeting: '$greeting! 👋',
+                subtitle: subtitle,
+                projects: projects,
+                selectedProject: selectedProject,
+                onProjectChanged: onProjectChanged,
+                onProfileTap: onProfileTap,
+                onAddProject: onAddProject,
+                isSuperAdmin: isSuperAdmin,
               ),
             ),
-            actions: [
-              IconButton(
-                icon: const CircleAvatar(
-                  backgroundColor: Colors.white24,
-                  child: Icon(Icons.person_rounded, color: Colors.white),
-                ),
-                onPressed: () => onProfileTap(),
-                tooltip: 'My Account',
-              ),
-            ],
           ),
 
           // Quick access grid

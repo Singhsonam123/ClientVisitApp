@@ -177,7 +177,7 @@ class AuthRepository {
       print('[AUTH] ERROR: Token extraction failed! Response keys: ${data.keys.toList()}');
       throw Exception('Failed to extract token from login response');
     }
-
+    data['role'] =  data['user']['role'] ;
     // Try to get id from response body or by decoding the JWT payload.
     String userId = data['id'] as String?
         ?? data['_id'] as String?

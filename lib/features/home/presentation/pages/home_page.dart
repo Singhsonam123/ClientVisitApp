@@ -5,6 +5,7 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/utils/app_toast.dart';
 import '../../../../core/utils/logout_dialog.dart';
 import '../../../employees/presentation/pages/configure_page.dart';
+import '../../../employees/presentation/pages/employees_page.dart';
 import '../../../auth/data/auth_repository.dart';
 import '../../../auth/domain/models/employee_model.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
@@ -57,10 +58,10 @@ class _HomePageState extends State<HomePage> {
   }
 
   List<_NavItem> _getNavItems(bool isSuperAdmin, bool isAdmin) {
-    // For ADMIN and SUPER_ADMIN roles, show only Configure screen
+    // For ADMIN and SUPER_ADMIN roles, show only Employee screen
     if (isAdmin || isSuperAdmin) {
       return const [
-        _NavItem(icon: Icons.admin_panel_settings_rounded, label: 'Configure'),
+        _NavItem(icon: Icons.people_rounded, label: 'Employee'),
       ];
     } else {
       return const [
@@ -73,11 +74,37 @@ class _HomePageState extends State<HomePage> {
   }
 
   List<Widget> _getPages(bool isSuperAdmin, bool isAdmin) {
+    // Determine subtitle based on role
+    final subtitle = isSuperAdmin
+        ? 'Admin Management'
+        : isAdmin
+            ? 'Employee Management'
+            : 'Team Connect';
+
     final dashboardPage = DashboardPage(
       selectedProject: _selectedProject,
       onLogoutTap: () => _handleLogout(context),
       onProfileTap: () => _openProfile(context),
       onProjectTap: () => _loadProjects(),
+      isSuperAdmin: isSuperAdmin,
+      projects: _projects,
+      onProjectChanged: (project) {
+        setState(() => _selectedProject = project);
+      },
+      onAddProject: _createNewProject,
+      subtitle: subtitle,
+    );
+
+    final employeesPage = EmployeesPage(
+      projects: _projects,
+      selectedProject: _selectedProject,
+      onProjectChanged: (project) {
+        setState(() => _selectedProject = project);
+      },
+      onProfileTap: () => _openProfile(context),
+      isSuperAdmin: isSuperAdmin,
+      onAddProject: _createNewProject,
+      subtitle: subtitle,
     );
 
     final configurePage = ConfigurePage(
@@ -90,9 +117,9 @@ class _HomePageState extends State<HomePage> {
       },
     );
 
-    // For ADMIN and SUPER_ADMIN roles, show only Configure screen
+    // For ADMIN and SUPER_ADMIN roles, show only Employee screen
     if (isAdmin || isSuperAdmin) {
-      return [configurePage];
+      return [employeesPage];
     } else {
       return [
         dashboardPage,
@@ -230,127 +257,54 @@ class _HomePageState extends State<HomePage> {
           });
         }
 
-        return Scaffold(
-          // appBar: AppBar(
-          //   title: const Text('Team Agenda'),
-          //   centerTitle: true,
-          //   elevation: 0,
-          //   backgroundColor: AppColors.primary,
-          //   foregroundColor: Colors.white,
-          //   bottom: PreferredSize(
-          //     preferredSize: const Size.fromHeight(60),
-          //     child: Padding(
-          //       padding: const EdgeInsets.all(12),
-          //       child: Row(
-          //         children: [
-          //           Expanded(
-          //             child: _isLoadingProjects
-          //                 ? const SizedBox(
-          //                     height: 40,
-          //                     child: Center(
-          //                       child: SizedBox(
-          //                         width: 20,
-          //                         height: 20,
-          //                         child: CircularProgressIndicator(
-          //                           strokeWidth: 2,
-          //                           valueColor: AlwaysStoppedAnimation<Color>(
-          //                             Colors.white,
-          //                           ),
-          //                         ),
-          //                       ),
-          //                     ),
-          //                   )
-          //                 : DropdownButton<ProjectModel>(
-          //                     isExpanded: true,
-          //                     value: _selectedProject,
-          //                     hint: const Text(
-          //                       'Select Project',
-          //                       style: TextStyle(color: Colors.white70),
-          //                     ),
-          //                     dropdownColor: AppColors.primary,
-          //                     style: const TextStyle(color: Colors.white),
-          //                     items: _projects
-          //                         .map((project) => DropdownMenuItem(
-          //                               value: project,
-          //                               child: Text(project.name),
-          //                             ))
-          //                         .toList(),
-          //                     onChanged: (project) {
-          //                       setState(() => _selectedProject = project);
-          //                     },
-          //                   ),
-          //           ),
-          //           const SizedBox(width: 8),
-          //           if (isSuperAdmin)
-          //             IconButton(
-          //               icon: const Icon(Icons.add_circle_outline),
-          //               tooltip: 'Add Project',
-          //               onPressed: _createNewProject,
-          //             ),
-          //         ],
-          //       ),
-          //     ),
-          //   ),
-          //   actions: [
-          //     Padding(
-          //       padding: const EdgeInsets.only(right: 8),
-          //       child: IconButton(
-          //         icon: const Icon(Icons.person_rounded),
-          //         tooltip: 'Profile',
-          //         onPressed: () => _openProfile(context),
-          //       ),
-          //     ),
-          //     Padding(
-          //       padding: const EdgeInsets.only(right: 8),
-          //       child: IconButton(
-          //         icon: const Icon(Icons.settings_rounded),
-          //         tooltip: 'Settings',
-          //         onPressed: () => _openSettings(context),
-          //       ),
-          //     ),
-          //     Padding(
-          //       padding: const EdgeInsets.only(right: 16),
-          //       child: IconButton(
-          //         icon: const Icon(Icons.logout_rounded),
-          //         tooltip: 'Logout',
-          //         onPressed: () => _handleLogout(context),
-          //       ),
-          //     ),
-          //   ],
-          // ),
-          body: IndexedStack(
-            index: _currentIndex.clamp(0, pages.length - 1),
-            children: pages,
-          ),
-          bottomNavigationBar: Container(
-            decoration: const BoxDecoration(
-              boxShadow: [
-                BoxShadow(
-                  color: AppColors.shadowMedium,
-                  blurRadius: 16,
-                  offset: Offset(0, -4),
-                ),
-              ],
-            ),
-            child: BottomNavigationBar(
-              currentIndex: _currentIndex.clamp(0, navItems.length - 1),
-              onTap: (index) => setState(() => _currentIndex = index),
-              type: BottomNavigationBarType.fixed,
-              selectedItemColor: AppColors.primary,
-              unselectedItemColor: AppColors.textHint,
-              selectedLabelStyle: const TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w700,
+        return Stack(
+          children: [
+            Scaffold(
+              body: IndexedStack(
+                index: _currentIndex.clamp(0, pages.length - 1),
+                children: pages,
               ),
-              unselectedLabelStyle: const TextStyle(fontSize: 11),
-              items: navItems
-                  .map((item) => BottomNavigationBarItem(
-                        icon: Icon(item.icon),
-                        label: item.label,
-                      ))
-                  .toList(),
+              bottomNavigationBar: navItems.length > 1
+                  ? Container(
+                      decoration: const BoxDecoration(
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.shadowMedium,
+                            blurRadius: 16,
+                            offset: Offset(0, -4),
+                          ),
+                        ],
+                      ),
+                      child: BottomNavigationBar(
+                        currentIndex: _currentIndex.clamp(0, navItems.length - 1),
+                        onTap: (index) => setState(() => _currentIndex = index),
+                        type: BottomNavigationBarType.fixed,
+                        selectedItemColor: AppColors.primary,
+                        unselectedItemColor: AppColors.textHint,
+                        selectedLabelStyle: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        unselectedLabelStyle: const TextStyle(fontSize: 11),
+                        items: navItems
+                            .map((item) => BottomNavigationBarItem(
+                                  icon: Icon(item.icon),
+                                  label: item.label,
+                                ))
+                            .toList(),
+                      ),
+                    )
+                  : null,
             ),
-          ),
+            // Loading overlay
+            if (_isLoadingProjects)
+              Container(
+                color: Colors.black.withValues(alpha: 0.3),
+                child: const Center(
+                  child: CircularProgressIndicator(),
+                ),
+              ),
+          ],
         );
       },
     );
