@@ -2,6 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:equatable/equatable.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../domain/models/photo_model.dart';
 import '../../data/gallery_repository.dart';
 
@@ -19,19 +20,25 @@ class GalleryLoadRequested extends GalleryEvent {
 class GalleryPhotoUploadRequested extends GalleryEvent {
   final String employeeId;
   final String employeeName;
-  final String albumName;
   final String caption;
   final ImageSource source;
   const GalleryPhotoUploadRequested({
     required this.employeeId,
     required this.employeeName,
-    required this.albumName,
     required this.caption,
     this.source = ImageSource.gallery,
   });
   @override
   List<Object?> get props =>
-      [employeeId, employeeName, albumName, caption, source];
+      [employeeId, employeeName, caption, source];
+}
+
+/// Event to update the project ID for the gallery
+class GalleryProjectIdUpdated extends GalleryEvent {
+  final String projectId;
+  const GalleryProjectIdUpdated(this.projectId);
+  @override
+  List<Object?> get props => [projectId];
 }
 
 /// Toggles the like state of [photoId].
@@ -55,6 +62,18 @@ class GalleryPhotoDeleteRequested extends GalleryEvent {
   const GalleryPhotoDeleteRequested({required this.photoId});
   @override
   List<Object?> get props => [photoId];
+}
+
+/// Event to moderate a post (Admin only)
+class GalleryPhotoModerationRequested extends GalleryEvent {
+  final String photoId;
+  final String status; // 'APPROVED' or 'REJECTED'
+  const GalleryPhotoModerationRequested({
+    required this.photoId,
+    required this.status,
+  });
+  @override
+  List<Object?> get props => [photoId, status];
 }
 
 // ── States ────────────────────────────────────────────────────────────────────
@@ -93,6 +112,15 @@ class GalleryUploading extends GalleryState {
   List<Object?> get props => [photos];
 }
 
+/// Emitted transiently when an upload succeeds so the UI can show a success toast
+class GalleryUploadSuccess extends GalleryState {
+  final String message;
+  final List<PhotoModel> photos;
+  const GalleryUploadSuccess({required this.message, required this.photos});
+  @override
+  List<Object?> get props => [message, photos];
+}
+
 /// Emitted transiently when an upload fails so the UI can show a snackbar
 /// without losing the existing photo list.
 class GalleryUploadError extends GalleryState {
@@ -105,14 +133,34 @@ class GalleryUploadError extends GalleryState {
 
 // ── BLoC ──────────────────────────────────────────────────────────────────────
 class GalleryBloc extends Bloc<GalleryEvent, GalleryState> {
-  final GalleryRepository _repository;
+  late GalleryRepository _repository;
   final ImagePicker _picker = ImagePicker();
+  final SharedPreferences _prefs;
+  late String _projectId;
 
-  GalleryBloc(this._repository) : super(const GalleryInitial()) {
+  GalleryBloc({
+    required SharedPreferences prefs,
+    required String projectId,
+  })  : _prefs = prefs,
+        super(const GalleryInitial()) {
+    _projectId = projectId;
+    _repository = GalleryRepository(_prefs, projectId: _projectId);
+    
     on<GalleryLoadRequested>(_onLoad);
     on<GalleryPhotoUploadRequested>(_onUpload);
     on<GalleryPhotoLikeToggleRequested>(_onLikeToggle);
     on<GalleryPhotoDeleteRequested>(_onDelete);
+    on<GalleryProjectIdUpdated>(_onProjectIdUpdated);
+    on<GalleryPhotoModerationRequested>(_onModerate);
+  }
+
+  /// Updates the repository when project ID changes
+  Future<void> _onProjectIdUpdated(
+    GalleryProjectIdUpdated event,
+    Emitter<GalleryState> emit,
+  ) async {
+    _projectId = event.projectId;
+    _repository = GalleryRepository(_prefs, projectId: _projectId);
   }
 
   // ── Load ──────────────────────────────────────────────────────────────────
@@ -165,11 +213,19 @@ class GalleryBloc extends Bloc<GalleryEvent, GalleryState> {
         employeeId:   event.employeeId,
         employeeName: event.employeeName,
         caption:      event.caption,
-        albumName:    event.albumName,
       );
 
       // Re-fetch so all albums are reflected.
       final photos = await _repository.fetchPhotos();
+      
+      // Emit success state first to show toast
+      emit(GalleryUploadSuccess(
+        message: 'Photo uploaded successfully! Pending admin approval.',
+        photos: photos,
+      ));
+      
+      // Then emit loaded state after a brief delay
+      await Future.delayed(const Duration(milliseconds: 500));
       emit(GalleryLoaded(photos));
     } catch (e) {
       final msg = _extractErrorMessage(e, fallback: 'Upload failed. Please try again.');
@@ -258,6 +314,26 @@ class GalleryBloc extends Bloc<GalleryEvent, GalleryState> {
     } catch (_) {
       // Revert on error.
       emit(GalleryLoaded(current));
+    }
+  }
+
+  // ── Moderation ─────────────────────────────────────────────────────────────
+
+  Future<void> _onModerate(
+    GalleryPhotoModerationRequested event,
+    Emitter<GalleryState> emit,
+  ) async {
+    try {
+      await _repository.moderatePost(event.photoId, event.status);
+      // Re-fetch to get the authoritative server state
+      final photos = await _repository.fetchPhotos();
+      emit(GalleryLoaded(photos));
+    } catch (e) {
+      final msg = _extractErrorMessage(
+        e,
+        fallback: 'Failed to moderate post. Please try again.',
+      );
+      emit(GalleryError(msg));
     }
   }
 

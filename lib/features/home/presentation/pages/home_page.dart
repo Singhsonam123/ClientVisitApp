@@ -15,6 +15,9 @@ import '../../../settings/presentation/bloc/settings_bloc.dart';
 import '../../../settings/presentation/pages/settings_page.dart';
 import '../../../projects/data/datasources/projects_remote_datasource.dart';
 import '../../../projects/data/models/project_model.dart';
+import '../../../gallery/presentation/pages/gallery_page.dart';
+import '../../../gallery/presentation/bloc/gallery_bloc.dart';
+import '../../../gallery/data/gallery_repository.dart';
 import 'dashboard_page.dart';
 
 class HomePage extends StatefulWidget {
@@ -58,17 +61,18 @@ class _HomePageState extends State<HomePage> {
   }
 
   List<_NavItem> _getNavItems(bool isSuperAdmin, bool isAdmin) {
-    // For ADMIN and SUPER_ADMIN roles, show only Employee screen
+    // For ADMIN and SUPER_ADMIN roles, show Employee and Gallery screens
     if (isAdmin || isSuperAdmin) {
       return const [
         _NavItem(icon: Icons.people_rounded, label: 'Employee'),
+        _NavItem(icon: Icons.photo_library_rounded, label: 'Gallery'),
       ];
     } else {
       return const [
         _NavItem(icon: Icons.home_rounded, label: 'Home'),
-        _NavItem(icon: Icons.calendar_month_rounded, label: 'Agenda'),
-        _NavItem(icon: Icons.restaurant_menu_rounded, label: 'Potluck'),
-        _NavItem(icon: Icons.cake_rounded, label: 'Sweets'),
+        _NavItem(icon: Icons.calendar_month_rounded, label: 'Gallery'),
+        // _NavItem(icon: Icons.restaurant_menu_rounded, label: 'Potluck'),
+        // _NavItem(icon: Icons.cake_rounded, label: 'Sweets'),
       ];
     }
   }
@@ -117,13 +121,45 @@ class _HomePageState extends State<HomePage> {
       },
     );
 
-    // For ADMIN and SUPER_ADMIN roles, show only Employee screen
+    // Gallery page wrapped with BlocProvider
+    final galleryPage = FutureBuilder<SharedPreferences>(
+      future: SharedPreferences.getInstance(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        
+        // Check if a project is selected
+        if (_selectedProject == null || _selectedProject!.id.isEmpty) {
+          return const Scaffold(
+            body: Center(
+              child: Text('Please select a project to view the gallery'),
+            ),
+          );
+        }
+        
+        final projectId = _selectedProject!.id;
+        final prefs = snapshot.data!;
+        
+        return BlocProvider(
+          create: (context) => GalleryBloc(
+            prefs: prefs,
+            projectId: projectId,
+          ),
+          child: const GalleryPage(),
+        );
+      },
+    );
+
+    // For ADMIN and SUPER_ADMIN roles, show Employee and Gallery screens
     if (isAdmin || isSuperAdmin) {
-      return [employeesPage];
+      return [employeesPage, galleryPage];
     } else {
       return [
         dashboardPage,
-        const SizedBox.shrink(), // Agenda placeholder
+        galleryPage,
         const SizedBox.shrink(), // Potluck placeholder
         const SizedBox.shrink(), // Sweets placeholder
         configurePage,
@@ -159,7 +195,7 @@ class _HomePageState extends State<HomePage> {
     if (authState is! AuthAuthenticated) return;
 
     // Check if user is super admin
-    if (authState.employee.role.displayName != 'super_admin') {
+    if (authState.employee.role.name != 'superAdmin') {
       AppToast.showError(context, 'Only Super Admin can create projects');
       return;
     }
@@ -184,7 +220,7 @@ class _HomePageState extends State<HomePage> {
               TextField(
                 controller: nameController,
                 decoration: const InputDecoration(
-                  labelText: 'Project Name',
+                  labelText: 'Project Name *',
                   hintText: 'Enter project name',
                 ),
               ),
@@ -192,7 +228,7 @@ class _HomePageState extends State<HomePage> {
               TextField(
                 controller: descriptionController,
                 decoration: const InputDecoration(
-                  labelText: 'Description',
+                  labelText: 'Description (Optional)',
                   hintText: 'Enter project description',
                 ),
                 maxLines: 3,
@@ -210,8 +246,8 @@ class _HomePageState extends State<HomePage> {
               final name = nameController.text.trim();
               final description = descriptionController.text.trim();
 
-              if (name.isEmpty || description.isEmpty) {
-                AppToast.showError(context, 'Please fill all fields');
+              if (name.isEmpty) {
+                AppToast.showError(context, 'Please enter project name');
                 return;
               }
 
@@ -219,14 +255,14 @@ class _HomePageState extends State<HomePage> {
                 final dataSource = ProjectsRemoteDataSourceImpl();
                 final newProject = await dataSource.createProject(
                   name: name,
-                  description: description,
+                  description: description.isEmpty ? '' : description,
                 );
 
                 if (mounted) {
                   Navigator.pop(context);
                   setState(() {
-                    _projects.add(newProject);
-                    _selectedProject = newProject;
+                    // Add new project to the top of the list without selecting it
+                    _projects.insert(0, newProject);
                   });
                   AppToast.showSuccess(context, 'Project created successfully');
                 }

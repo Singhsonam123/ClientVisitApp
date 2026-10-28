@@ -8,15 +8,73 @@ import '../../../../core/theme/app_colors.dart';
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/widgets/app_card.dart';
 import '../../../auth/presentation/bloc/auth_bloc.dart';
+import '../../../auth/domain/models/employee_model.dart';
 import '../bloc/gallery_bloc.dart';
 import '../../domain/models/photo_model.dart';
+import '../../data/gallery_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared image builder
 // ─────────────────────────────────────────────────────────────────────────────
 
-Widget _buildPhotoImage(String path, {BoxFit fit = BoxFit.cover}) {
+Widget _buildPhotoImage(String path, {BoxFit fit = BoxFit.cover, String moderationStatus = 'APPROVED', String caption = ''}) {
+  // Handle null or empty image URL - show placeholder with status and caption
+  if (path.isEmpty || path == 'null') {
+    final isPending = moderationStatus.toUpperCase() == 'PENDING';
+    final isRejected = moderationStatus.toUpperCase() == 'REJECTED';
+    
+    return Container(
+      color: AppColors.surfaceVariant,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Icon(Icons.image_not_supported_outlined,
+              color: AppColors.textHint, size: 40),
+          const SizedBox(height: 8),
+          if (isPending)
+            const Text(
+              'Pending Approval',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          if (isRejected)
+            const Text(
+              'Rejected',
+              style: TextStyle(
+                color: Colors.red,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          if (caption.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Text(
+                caption,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+  
   if (path.startsWith('http')) {
+    final isPending = moderationStatus.toUpperCase() == 'PENDING';
+    final isRejected = moderationStatus.toUpperCase() == 'REJECTED';
     final headers = ApiClient.token != null
         ? {'Authorization': 'Bearer ${ApiClient.token}'}
         : <String, String>{};
@@ -35,18 +93,105 @@ Widget _buildPhotoImage(String path, {BoxFit fit = BoxFit.cover}) {
       ),
       errorWidget: (_, __, ___) => Container(
         color: AppColors.surfaceVariant,
-        child: const Icon(Icons.broken_image_outlined,
-            color: AppColors.textHint, size: 40),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            const Icon(Icons.broken_image_outlined,
+                color: AppColors.textHint, size: 40),
+            const SizedBox(height: 8),
+            if (isPending)
+              const Text(
+                'Pending Approval',
+                style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            if (isRejected)
+              const Text(
+                'Rejected',
+                style: TextStyle(
+                  color: Colors.red,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            if (caption.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                child: Text(
+                  caption,
+                  style: const TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
+  final isPending = moderationStatus.toUpperCase() == 'PENDING';
+  final isRejected = moderationStatus.toUpperCase() == 'REJECTED';
+  
   return Image.file(
     File(path),
     fit: fit,
     errorBuilder: (_, __, ___) => Container(
       color: AppColors.surfaceVariant,
-      child: const Icon(Icons.broken_image_outlined,
-          color: AppColors.textHint, size: 40),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Icon(Icons.broken_image_outlined,
+              color: AppColors.textHint, size: 40),
+          const SizedBox(height: 8),
+          if (isPending)
+            const Text(
+              'Pending Approval',
+              style: TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          if (isRejected)
+            const Text(
+              'Rejected',
+              style: TextStyle(
+                color: Colors.red,
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          if (caption.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
+              child: Text(
+                caption,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ],
+      ),
     ),
   );
 }
@@ -63,26 +208,12 @@ class GalleryPage extends StatefulWidget {
 }
 
 class _GalleryPageState extends State<GalleryPage> {
+  String _selectedFilter = 'all'; // 'all', 'approved', 'pending', 'rejected'
+
   @override
   void initState() {
     super.initState();
     context.read<GalleryBloc>().add(const GalleryLoadRequested());
-  }
-
-  /// Returns sorted unique album names from the current BLoC state.
-  List<String> _existingAlbums() {
-    final state = context.read<GalleryBloc>().state;
-    final photos = state is GalleryLoaded
-        ? state.photos
-        : state is GalleryUploading
-            ? state.photos
-            : <PhotoModel>[];
-    final names = photos
-        .map((p) => p.dayLabel.isNotEmpty ? p.dayLabel : 'General')
-        .toSet()
-        .toList()
-      ..sort();
-    return names;
   }
 
   // ── Upload flow ─────────────────────────────────────────────────────────
@@ -153,206 +284,53 @@ class _GalleryPageState extends State<GalleryPage> {
     final authState = context.read<AuthBloc>().state;
     if (authState is! AuthAuthenticated) return;
 
-    final existingAlbums = _existingAlbums();
-    // Sentinel value used in dropdown to represent "create new album"
-    const kNewAlbum = '__new__';
-
-    String caption           = '';
-    // Default: first existing album or sentinel if none exist
-    String dropdownValue     = existingAlbums.isNotEmpty ? existingAlbums.first : kNewAlbum;
-    String newAlbumName      = '';
+    String caption = '';
 
     showDialog(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDlgState) {
-          final isNewAlbum = dropdownValue == kNewAlbum;
-
-          // Dropdown items: existing albums + divider + "Create new album"
-          final dropdownItems = <DropdownMenuItem<String>>[
-            ...existingAlbums.map((name) => DropdownMenuItem(
-                  value: name,
-                  child: Text(name, overflow: TextOverflow.ellipsis),
-                )),
-            if (existingAlbums.isNotEmpty)
-              const DropdownMenuItem<String>(
-                enabled: false,
-                value: '__divider__',
-                child: Divider(height: 1),
-              ),
-            const DropdownMenuItem<String>(
-              value: kNewAlbum,
-              child: Row(
-                children: [
-                  Icon(Icons.add_circle_outline_rounded,
-                      size: 18, color: AppColors.primary),
-                  SizedBox(width: 8),
-                  Text('Create new album',
-                      style: TextStyle(color: AppColors.primary,
-                          fontWeight: FontWeight.w600)),
-                ],
-              ),
-            ),
-          ];
-
-          return AlertDialog(
-            title: Text(source == ImageSource.camera ? 'Take a Photo' : 'Upload Photo'),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // ── Caption ───────────────────────────────────────────────
-                  TextField(
-                    decoration: const InputDecoration(
-                      labelText: 'Caption (optional)',
-                      hintText: 'Add a caption…',
-                      prefixIcon: Icon(Icons.edit_outlined),
-                    ),
-                    maxLines: 2,
-                    onChanged: (v) => caption = v,
-                  ),
-                  const SizedBox(height: 20),
-
-                  // ── Album dropdown ────────────────────────────────────────
-                  const Text(
-                    'Album',
-                    style: TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-
-                  DropdownButtonFormField<String>(
-                    value: dropdownValue,
-                    isExpanded: true,
-                    decoration: InputDecoration(
-                      prefixIcon: const Icon(Icons.photo_album_outlined),
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      contentPadding: const EdgeInsets.symmetric(
-                          vertical: 12, horizontal: 12),
-                    ),
-                    items: dropdownItems,
-                    onChanged: (v) {
-                      if (v == null || v == '__divider__') return;
-                      setDlgState(() => dropdownValue = v);
-                    },
-                  ),
-
-                  // ── Reset selection (shown when an existing album is chosen) ──
-                  if (!isNewAlbum)
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: TextButton.icon(
-                        icon: const Icon(Icons.restart_alt_rounded, size: 16),
-                        label: const Text('Reset'),
-                        style: TextButton.styleFrom(
-                          foregroundColor: AppColors.textSecondary,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 4, vertical: 2),
-                          visualDensity: VisualDensity.compact,
-                          textStyle: const TextStyle(fontSize: 12),
-                        ),
-                        onPressed: () =>
-                            setDlgState(() => dropdownValue = kNewAlbum),
-                      ),
-                    ),
-
-                  // ── New-album text field (shown when "Create new album" selected) ──
-                  if (isNewAlbum) ...[
-                    const SizedBox(height: 16),
-                    TextField(
-                      autofocus: true,
-                      textCapitalization: TextCapitalization.words,
-                      onChanged: (v) => setDlgState(() => newAlbumName = v),
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w500,
-                        color: AppColors.textPrimary,
-                      ),
-                      decoration: InputDecoration(
-                        labelText: 'New Album Name *',
-                        labelStyle: const TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        hintText: 'e.g. Day 1, Team Outing…',
-                        prefixIcon: const Icon(Icons.drive_file_rename_outline_rounded,
-                            color: AppColors.primary),
-                        filled: true,
-                        fillColor: AppColors.primaryLight.withOpacity(0.15),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                              color: AppColors.primary, width: 1.5),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(10),
-                          borderSide: const BorderSide(
-                              color: AppColors.primary, width: 2),
-                        ),
-                      ),
-                    ),
-                    if (newAlbumName.trim().isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.only(top: 6, left: 4),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline_rounded,
-                                size: 13, color: AppColors.primary),
-                            SizedBox(width: 4),
-                            Text(
-                              'Album name is required to continue.',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: AppColors.primary,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton.icon(
-                icon: Icon(source == ImageSource.camera
-                    ? Icons.camera_alt_rounded
-                    : Icons.photo_library_rounded),
-                label: Text(source == ImageSource.camera
-                    ? 'Open Camera'
-                    : 'Choose Photo'),
-                onPressed: (isNewAlbum && newAlbumName.trim().isEmpty)
-                    ? null
-                    : () {
-                        Navigator.pop(ctx);
-                        final resolvedAlbum = isNewAlbum
-                            ? newAlbumName.trim()
-                            : dropdownValue;
-                        context.read<GalleryBloc>().add(
-                              GalleryPhotoUploadRequested(
-                                employeeId:   authState.employee.id,
-                                employeeName: authState.employee.name,
-                                albumName:    resolvedAlbum,
-                                caption:      caption.trim(),
-                                source: source,
-                              ),
-                            );
-                      },
+      builder: (ctx) => AlertDialog(
+        title: Text(source == ImageSource.camera ? 'Take a Photo' : 'Upload Photo'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // ── Caption ───────────────────────────────────────────────
+              TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Caption (optional)',
+                  hintText: 'Add a caption to your photo…',
+                  prefixIcon: Icon(Icons.edit_outlined),
+                ),
+                maxLines: 2,
+                onChanged: (v) => caption = v,
               ),
             ],
-          );
-        },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            icon: Icon(source == ImageSource.camera
+                ? Icons.camera_alt_rounded
+                : Icons.photo_library_rounded),
+            label: const Text('Upload'),
+            onPressed: () {
+              Navigator.pop(ctx);
+              context.read<GalleryBloc>().add(
+                    GalleryPhotoUploadRequested(
+                      employeeId:   authState.employee.id,
+                      employeeName: authState.employee.name,
+                      caption:      caption.trim(),
+                      source: source,
+                    ),
+                  );
+            },
+          ),
+        ],
       ),
     );
   }
@@ -361,6 +339,11 @@ class _GalleryPageState extends State<GalleryPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Fetch role from AuthBloc state
+    final authState = context.read<AuthBloc>().state;
+    final isEmployee = authState is AuthAuthenticated &&
+        authState.employee.role == UserRole.employee;
+    
     return Scaffold(
       backgroundColor: AppColors.background,
       appBar: AppBar(
@@ -378,14 +361,41 @@ class _GalleryPageState extends State<GalleryPage> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _showSourcePicker,
-        icon: const Icon(Icons.add_photo_alternate_rounded),
-        label: const Text('Upload'),
-      ),
+      floatingActionButton: isEmployee
+          ? FloatingActionButton.extended(
+              onPressed: _showSourcePicker,
+              icon: const Icon(Icons.add_photo_alternate_rounded),
+              label: const Text('Upload'),
+            )
+          : null,
       body: BlocConsumer<GalleryBloc, GalleryState>(
         listener: (context, state) {
-          if (state is GalleryUploadError) {
+          if (state is GalleryUploadSuccess) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded,
+                          color: Colors.white, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          state.message,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: Colors.green.shade700,
+                  behavior: SnackBarBehavior.floating,
+                  duration: const Duration(seconds: 4),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+          } else if (state is GalleryUploadError) {
             ScaffoldMessenger.of(context)
               ..hideCurrentSnackBar()
               ..showSnackBar(
@@ -474,15 +484,48 @@ class _GalleryPageState extends State<GalleryPage> {
             return const EmptyState(
               icon: Icons.photo_library_outlined,
               title: 'No photos yet',
-              subtitle: 'Be the first to upload a memory from the event!',
+              subtitle: 'Be the first to share a photo to the project feed!',
             );
           }
 
-          return _buildAlbumSections(photos);
-        },
-      ),
-    );
-  }
+          return Column(
+            children: [
+              // ── Filter chips ────────────────────────────────────────────
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                child: Row(
+                  children: [
+                    _buildFilterChip('All', 'all', photos.length),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      'Approved',
+                      'approved',
+                      photos.where((p) => p.isApproved).length,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      'Pending',
+                      'pending',
+                      photos.where((p) => p.isPending).length,
+                    ),
+                    const SizedBox(width: 8),
+                    _buildFilterChip(
+                      'Rejected',
+                      'rejected',
+                      photos.where((p) => p.isRejected).length,
+                    ),
+                  ],
+                ),
+              ),
+              // ── Album sections ──────────────────────────────────────────
+              Expanded(child: _buildAlbumSections(photos)),
+            ],
+          );
+       },
+     ),
+   );
+ }
 
   // ── Album-grouped layout ─────────────────────────────────────────────────
 
@@ -495,26 +538,259 @@ class _GalleryPageState extends State<GalleryPage> {
     return map;
   }
 
-  Widget _buildAlbumSections(List<PhotoModel> photos) {
-    final albums = _groupByAlbum(photos);
+  Future<void> _moderatePhoto(BuildContext context, String photoId, String status) async {
+    try {
+      final galleryRepo = context.read<GalleryRepository>();
+      await galleryRepo.moderatePost(photoId, status);
+      
+      // Refresh gallery after moderation
+      if (mounted) {
+        context.read<GalleryBloc>().add(const GalleryLoadRequested());
+        
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.check_circle_rounded,
+                      color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Photo ${status.toLowerCase()}',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: status == 'APPROVED' ? Colors.green.shade700 : Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 3),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Row(
+                children: [
+                  const Icon(Icons.error_outline_rounded,
+                      color: Colors.white, size: 20),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Error: $e',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ),
+                ],
+              ),
+              backgroundColor: Colors.red.shade700,
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12)),
+            ),
+          );
+      }
+    }
+  }
 
-    // ── Find the single most-liked photo across ALL albums ────────────────
+  Widget _buildFilterChip(String label, String value, int count) {
+    final isSelected = _selectedFilter == value;
+    return FilterChip(
+      label: Text(
+        '$label ($count)',
+        style: TextStyle(
+          color: isSelected ? AppColors.textOnPrimary : AppColors.textPrimary,
+          fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+        ),
+      ),
+      selected: isSelected,
+      onSelected: (selected) {
+        setState(() {
+          _selectedFilter = value;
+        });
+      },
+      backgroundColor: isSelected ? AppColors.primary : AppColors.surfaceVariant,
+      selectedColor: AppColors.primary,
+      side: BorderSide(
+        color: isSelected ? AppColors.primary : AppColors.textHint,
+        width: isSelected ? 2 : 1,
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+    );
+  }
+
+  List<PhotoModel> _filterPhotos(List<PhotoModel> photos) {
+    switch (_selectedFilter) {
+      case 'approved':
+        return photos.where((p) => p.isApproved).toList();
+      case 'pending':
+        return photos.where((p) => p.isPending).toList();
+      case 'rejected':
+        return photos.where((p) => p.isRejected).toList();
+      default:
+        return photos;
+    }
+  }
+
+  Widget _buildAlbumSections(List<PhotoModel> photos) {
+    // ── Filter photos based on selected filter ───────────────────────────
+    final filteredPhotos = _filterPhotos(photos);
+    
+    // ── Separate photos by approval status ────────────────────────────────
+    final pendingPhotos = filteredPhotos.where((p) => p.isPending).toList();
+    final approvedPhotos = filteredPhotos.where((p) => p.isApproved).toList();
+    final rejectedPhotos = filteredPhotos.where((p) => p.isRejected).toList();
+
+    // ── Find the single most-liked photo across ALL APPROVED albums ───────
     PhotoModel? topPhoto;
-    for (final p in photos) {
+    for (final p in approvedPhotos) {
       if (topPhoto == null || p.likeCount > topPhoto.likeCount) {
         topPhoto = p;
       }
     }
 
+    final pendingAlbums = _groupByAlbum(pendingPhotos);
+    final approvedAlbums = _groupByAlbum(approvedPhotos);
+    final rejectedAlbums = _groupByAlbum(rejectedPhotos);
+
     return ListView(
       padding: const EdgeInsets.only(bottom: 100),
       children: [
-        if (topPhoto != null && topPhoto.likeCount > 0)
-          _MostLikedBanner(photo: topPhoto),
-        ...albums.entries
-            .map((e) => _AlbumSection(albumName: e.key, photos: e.value))
-            .toList(),
+        // ── PENDING SECTION ──────────────────────────────────────────────
+        if (pendingPhotos.isNotEmpty) ...[
+          _StatusSectionHeader(
+            title: 'Pending Approval',
+            count: pendingPhotos.length,
+            statusColor: Colors.orange,
+            icon: Icons.hourglass_top_rounded,
+          ),
+          ...pendingAlbums.entries
+              .map((e) => _AlbumSection(albumName: e.key, photos: e.value))
+              .toList(),
+        ],
+
+        // ── APPROVED SECTION ─────────────────────────────────────────────
+        if (approvedPhotos.isNotEmpty) ...[
+          _StatusSectionHeader(
+            title: 'Approved',
+            count: approvedPhotos.length,
+            statusColor: Colors.green,
+            icon: Icons.check_circle_rounded,
+          ),
+          if (topPhoto != null && topPhoto.likeCount > 0)
+            _MostLikedBanner(photo: topPhoto),
+          ...approvedAlbums.entries
+              .map((e) => _AlbumSection(albumName: e.key, photos: e.value))
+              .toList(),
+        ],
+
+        // ── REJECTED SECTION ─────────────────────────────────────────────
+        if (rejectedPhotos.isNotEmpty) ...[
+          _StatusSectionHeader(
+            title: 'Rejected',
+            count: rejectedPhotos.length,
+            statusColor: Colors.red,
+            icon: Icons.cancel_rounded,
+          ),
+          ...rejectedAlbums.entries
+              .map((e) => _AlbumSection(albumName: e.key, photos: e.value))
+              .toList(),
+        ],
       ],
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _StatusSectionHeader — header for Pending/Approved sections
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _StatusSectionHeader extends StatelessWidget {
+  final String title;
+  final int count;
+  final Color statusColor;
+  final IconData icon;
+
+  const _StatusSectionHeader({
+    required this.title,
+    required this.count,
+    required this.statusColor,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 12),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: statusColor.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: statusColor.withOpacity(0.3), width: 1.5),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: statusColor.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: statusColor, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                      color: statusColor,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  Text(
+                    '$count photo${count == 1 ? '' : 's'} awaiting review',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: statusColor.withOpacity(0.7),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: statusColor,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Text(
+                '$count',
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -561,7 +837,7 @@ class _MostLikedBanner extends StatelessWidget {
                 child: SizedBox(
                   width: 70,
                   height: 70,
-                  child: _buildPhotoImage(photo.imagePath, fit: BoxFit.cover),
+                  child: _buildPhotoImage(photo.imagePath, fit: BoxFit.cover, moderationStatus: photo.moderationStatus, caption: photo.caption),
                 ),
               ),
               // Trophy badge overlay
@@ -714,7 +990,7 @@ class _AlbumSection extends StatelessWidget {
             crossAxisCount: 2,
             crossAxisSpacing: 10,
             mainAxisSpacing: 10,
-            childAspectRatio: 0.85,
+            childAspectRatio: 0.65,
           ),
           itemCount: photos.length,
           itemBuilder: (_, index) => _PhotoCard(photo: photos[index]),
@@ -739,75 +1015,147 @@ class _PhotoCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return GestureDetector(
       onTap: () => _showFullScreen(context),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(AppConstants.radiusL),
-          boxShadow: const [
-            BoxShadow(
-                color: AppColors.shadow,
-                blurRadius: 6,
-                offset: Offset(0, 2))
-          ],
-        ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(AppConstants.radiusL),
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Photo
-              _buildPhotoImage(photo.imagePath, fit: BoxFit.cover),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ── Image container ─────────────────────────────────────────────
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(AppConstants.radiusL),
+                boxShadow: const [
+                  BoxShadow(
+                      color: AppColors.shadow,
+                      blurRadius: 6,
+                      offset: Offset(0, 2))
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(AppConstants.radiusL),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Photo
+                    _buildPhotoImage(photo.imagePath, fit: BoxFit.cover, moderationStatus: photo.moderationStatus, caption: photo.caption),
 
-              // Bottom gradient overlay: caption + like button
-              Positioned(
-                bottom: 0,
-                left: 0,
-                right: 0,
-                child: Container(
-                  padding: const EdgeInsets.fromLTRB(10, 20, 6, 8),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [Colors.transparent, Colors.black87],
-                      begin: Alignment.topCenter,
-                      end: Alignment.bottomCenter,
+                    // Like button in top-right corner
+                    Positioned(
+                      top: 8,
+                      right: 8,
+                      child: _LikeButton(photo: photo, mini: true),
                     ),
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            // Caption — only shown when non-empty
-                            if (photo.caption.isNotEmpty)
-                              Text(
-                                photo.caption,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w500),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            Text(
-                              photo.employeeName,
-                              style: const TextStyle(
-                                  color: Colors.white70, fontSize: 10),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      _LikeButton(photo: photo, mini: true),
-                    ],
-                  ),
+                  ],
                 ),
               ),
-            ],
+            ),
           ),
-        ),
+
+          // ── Caption and employee name below image ────────────────────────
+          const SizedBox(height: 8),
+          if (photo.caption.isNotEmpty)
+            Text(
+              photo.caption,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          Text(
+            photo.employeeName,
+            style: const TextStyle(
+              color: AppColors.textSecondary,
+              fontSize: 11,
+              fontWeight: FontWeight.w500,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          
+          // ── Moderation buttons for ADMIN on pending photos ────────────────
+          if (photo.isPending)
+            BlocBuilder<AuthBloc, AuthState>(
+              builder: (ctx, authState) {
+                final isAdmin = authState is AuthAuthenticated &&
+                    (authState.employee.role == 'ADMIN' ||
+                        authState.employee.role == 'SUPER_ADMIN');
+                
+                if (!isAdmin) return const SizedBox.shrink();
+                
+                return Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.orange.withOpacity(0.3), width: 1),
+                        ),
+                        child: const Text(
+                          'Pending Review',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.orange,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.check_rounded, size: 16),
+                              label: const Text('Approve', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.green,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                elevation: 2,
+                              ),
+                              onPressed: () {
+                                final pageState = ctx.findAncestorStateOfType<_GalleryPageState>();
+                                pageState?._moderatePhoto(ctx, photo.id, 'APPROVED');
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              icon: const Icon(Icons.close_rounded, size: 16),
+                              label: const Text('Reject', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(vertical: 8),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                elevation: 2,
+                              ),
+                              onPressed: () {
+                                final pageState = ctx.findAncestorStateOfType<_GalleryPageState>();
+                                pageState?._moderatePhoto(ctx, photo.id, 'REJECTED');
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
+        ],
       ),
     );
   }
@@ -828,7 +1176,7 @@ class _PhotoCard extends StatelessWidget {
             children: [
               // Full-screen image
               Center(
-                child: _buildPhotoImage(photo.imagePath, fit: BoxFit.contain),
+                child: _buildPhotoImage(photo.imagePath, fit: BoxFit.contain, moderationStatus: photo.moderationStatus, caption: photo.caption),
               ),
 
               // Close button (top-right)

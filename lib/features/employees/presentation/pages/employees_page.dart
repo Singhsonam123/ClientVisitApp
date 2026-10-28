@@ -60,12 +60,21 @@ class _EmployeesPageState extends State<EmployeesPage> {
   bool _isAdminRole = false;
   bool _isSuperAdminRole = false;
   bool _isAddingEmployee = false;
+  late TextEditingController _searchController;
+  List<EmployeeModel> _filteredEmployees = [];
 
   @override
   void initState() {
     super.initState();
+    _searchController = TextEditingController();
     _checkUserRole();
     _employeesFuture = _loadProjectEmployees();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   @override
@@ -146,6 +155,23 @@ class _EmployeesPageState extends State<EmployeesPage> {
   void _refreshEmployees() {
     setState(() {
       _employeesFuture = _loadProjectEmployees();
+      _searchController.clear();
+      _filteredEmployees = [];
+    });
+  }
+
+  void _filterEmployees(String query, List<EmployeeModel> employees) {
+    setState(() {
+      if (query.isEmpty) {
+        _filteredEmployees = employees;
+      } else {
+        _filteredEmployees = employees
+            .where((employee) =>
+                employee.fullName.toLowerCase().contains(query.toLowerCase()) ||
+                employee.email.toLowerCase().contains(query.toLowerCase()) ||
+                (employee.jobTitle?.toLowerCase().contains(query.toLowerCase()) ?? false))
+            .toList();
+      }
     });
   }
 
@@ -539,6 +565,11 @@ class _EmployeesPageState extends State<EmployeesPage> {
                     }
 
                     final employees = snapshot.data ?? [];
+                    
+                    // Initialize filtered employees on first load
+                    if (_filteredEmployees.isEmpty && employees.isNotEmpty) {
+                      _filteredEmployees = employees;
+                    }
 
                     // Only show "No employees found" if API returned successfully with empty list
                     if (employees.isEmpty && snapshot.hasData) {
@@ -569,21 +600,82 @@ class _EmployeesPageState extends State<EmployeesPage> {
                       );
                     }
 
-                    return RefreshIndicator(
-                      onRefresh: () async {
-                        _refreshEmployees();
-                        await _employeesFuture;
-                      },
-                      child: ListView.builder(
-                        padding: const EdgeInsets.all(16),
-                        itemCount: employees.length,
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        shrinkWrap: true,
-                        itemBuilder: (context, index) {
-                          final employee = employees[index];
-                          return _buildEmployeeCard(employee);
-                        },
-                      ),
+                    return Column(
+                      children: [
+                        // Search field
+                        Padding(
+                          padding: const EdgeInsets.all(16),
+                          child: TextField(
+                            controller: _searchController,
+                            decoration: InputDecoration(
+                              hintText: 'Search by name, email, or job title...',
+                              prefixIcon: const Icon(Icons.search),
+                              suffixIcon: _searchController.text.isNotEmpty
+                                  ? IconButton(
+                                      icon: const Icon(Icons.clear),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        _filterEmployees('', employees);
+                                      },
+                                    )
+                                  : null,
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            ),
+                            onChanged: (query) {
+                              _filterEmployees(query, employees);
+                            },
+                          ),
+                        ),
+                        // Employee list
+                        if (_filteredEmployees.isEmpty && _searchController.text.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Center(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.search_off,
+                                    size: 64,
+                                    color: AppColors.textHint,
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No employees found',
+                                    style: AppTextStyles.headlineSmall,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Try searching with different keywords',
+                                    style: AppTextStyles.bodySmall.copyWith(
+                                      color: AppColors.textHint,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        else
+                          RefreshIndicator(
+                            onRefresh: () async {
+                              _refreshEmployees();
+                              await _employeesFuture;
+                            },
+                            child: ListView.builder(
+                              padding: const EdgeInsets.all(16),
+                              itemCount: _filteredEmployees.length,
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              shrinkWrap: true,
+                              itemBuilder: (context, index) {
+                                final employee = _filteredEmployees[index];
+                                return _buildEmployeeCard(employee);
+                              },
+                            ),
+                          ),
+                      ],
                     );
                   },
                 ),

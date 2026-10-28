@@ -7,12 +7,21 @@
 - [x] Login page (mock credentials, SharedPreferences session)
 - [x] Auth BLoC (login, logout, session restore on app start)
 - [x] Home page with BottomNavigationBar (Dashboard, Agenda, Gallery, Potluck, Voting tabs)
+- [x] Home page — Gallery tab visible for ADMIN and SUPER_ADMIN roles
 - [x] Dashboard page with event highlights and feature cards
 - [x] Agenda page — 3-day timeline with session cards
 - [x] Potluck page — static menu list by category
 - [x] Sweets page — QR scanner reveals sweet details
-- [x] Gallery page — grid view with day-filter chips, upload FAB
+- [x] Gallery page — grid view with day-filter chips, upload FAB (EMPLOYEE role only)
+- [x] Gallery page — upload button visible only to EMPLOYEE role, hidden from ADMIN/SUPER_ADMIN
+- [x] Gallery page — three sections: "Pending Approval" (orange), "Approved" (green), "Rejected" (red)
+- [x] Gallery page — filter chips at top showing counts for each status (All, Approved, Pending, Rejected)
+- [x] Gallery page — captions displayed below images with employee name
+- [x] Gallery page — real images shown (not placeholders) for approved photos
 - [x] Gallery BLoC — `GalleryLoadRequested`, `GalleryPhotoUploadRequested` events; Loading / Uploading / Loaded / Error states
+- [x] Gallery placeholder — shows status and caption when image is null/empty
+- [x] Gallery like button — positioned in top-right corner of image
+- [x] PhotoModel — `moderationStatus` field supporting 'PENDING', 'APPROVED', 'REJECTED' statuses
 - [x] Voting page — candidate cards with vote counts, cast vote button
 - [x] Voting BLoC — `VotingLoadRequested` (with employeeId), `VotingCastRequested` (employeeId + candidateId); handles 409 duplicate vote
 - [x] `image_picker` integration in GalleryBloc for photo selection

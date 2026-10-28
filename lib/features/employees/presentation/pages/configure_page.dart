@@ -630,7 +630,7 @@ Future<List<EmployeeModel>> _loadProjectMembers() async {
 
                             try {
                               final endpoint =
-                                  '/api/projects/${widget.projectId}/add-employee/';
+                                  '/projects/${widget.projectId}/add-employee/';
                               final payload = {
                                 'email': emailController.text.trim(),
                                 'full_name': fullNameController.text.trim(),
@@ -880,7 +880,7 @@ Future<List<EmployeeModel>> _loadProjectMembers() async {
 
                             try {
                               final endpoint =
-                                  '/api/projects/${widget.projectId}/add-guest/';
+                                  '/projects/${widget.projectId}/add-guest/';
                               final payload = {
                                 'email': emailController.text.trim(),
                                 'full_name': fullNameController.text.trim(),

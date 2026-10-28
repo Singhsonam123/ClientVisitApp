@@ -4,149 +4,157 @@ import '../../../core/constants/app_constants.dart';
 import '../../../core/network/api_client.dart';
 import '../domain/models/photo_model.dart';
 
-/// Repository for the photo gallery.
+/// Repository for the photo gallery using project feed endpoints.
 ///
 /// ## API contract used
-/// | Method | Path                          | Auth   | Description               |
-/// |--------|-------------------------------|--------|---------------------------|
-/// | POST   | /albums                       | Bearer | Create album              |
-/// | GET    | /albums                       | Bearer | List all albums           |
-/// | POST   | /albums/{albumId}/photos      | Bearer | Upload photo (key: file)  |
-/// | GET    | /albums/{albumId}/photos      | Bearer | List album photos         |
-/// | DELETE | /photos/{photoId}             | Bearer | Delete a photo            |
-/// | POST   | /photos/{photoId}/likes       | Bearer | Like a photo (201)        |
-/// | DELETE | /photos/{photoId}/likes       | Bearer | Unlike a photo (200)      |
+/// | Method | Path                                    | Auth   | Description               |
+/// |--------|----------------------------------------|--------|---------------------------|
+/// | POST   | /api/projects/{id}/feed/                | Bearer | Create post (upload photo)|
+/// | GET    | /api/projects/{id}/feed/                | Bearer | List APPROVED posts       |
+/// | PATCH  | /api/projects/{id}/feed/{post_id}/moderate/ | Bearer | Moderate post (Admin)  |
 ///
-/// Albums are created on demand by name and cached in SharedPreferences
-/// under the key `album_id_{sanitised_album_name}`.
+/// Posts are created with PENDING status and must be approved by admin.
+/// Request format: { "image_url": "url", "caption": "text" }
 class GalleryRepository {
   final Dio _dio = ApiClient.instance;
   final SharedPreferences _prefs;
+  final String projectId;
 
-  GalleryRepository(this._prefs);
-
-  // ── Album management ──────────────────────────────────────────────────────
-
-  /// Returns the ID of the album called [albumName], creating it if needed.
-  /// Results are cached so repeat calls are instant.
-  Future<String> _resolveAlbumId(String albumName) async {
-    final cacheKey =
-        'album_id_${albumName.toLowerCase().replaceAll(RegExp(r'\s+'), '_')}';
-    final cached = _prefs.getString(cacheKey) ?? '';
-    if (cached.isNotEmpty) return cached;
-
-    // Try to find an existing album with the same name.
-    try {
-      final resp = await _dio.get('/albums');
-      final albums = _parseList(resp.data, 'albums');
-      for (final a in albums) {
-        final albumMap = a as Map<String, dynamic>;
-        if ((albumMap['name'] as String? ?? '') == albumName) {
-          final id =
-              albumMap['_id'] as String? ?? albumMap['id'] as String? ?? '';
-          if (id.isNotEmpty) {
-            await _prefs.setString(cacheKey, id);
-            return id;
-          }
-        }
-      }
-    } catch (_) {
-      // GET /albums failed — proceed to create.
-    }
-
-    // Create a new album.
-    final createResp = await _dio.post(
-      '/albums',
-      data: {
-        'name': albumName,
-        'description': '${AppConstants.eventAlbumDescription} · $albumName',
-      },
-    );
-    final albumData = _extractObject(createResp.data, 'album');
-    final newId =
-        albumData['_id'] as String? ?? albumData['id'] as String? ?? '';
-    if (newId.isNotEmpty) {
-      await _prefs.setString(cacheKey, newId);
-    }
-    return newId;
-  }
+  GalleryRepository(this._prefs, {required this.projectId});
 
   // ── Fetch photos ──────────────────────────────────────────────────────────
 
-  /// Returns photos from **all** albums on the server, merged into one list.
-  /// Each photo's [PhotoModel.dayLabel] is set to its album name for display.
+  /// Returns photos/posts from the project feed.
+  /// Includes both APPROVED and PENDING posts (for users to see their own pending uploads).
   Future<List<PhotoModel>> fetchPhotos() async {
-    final resp = await _dio.get('/albums');
-    final albums = _parseList(resp.data, 'albums');
-    if (albums.isEmpty) return [];
-
-    final allPhotos = <PhotoModel>[];
-    for (final a in albums) {
-      final albumMap = a as Map<String, dynamic>;
-      final albumId =
-          albumMap['_id'] as String? ?? albumMap['id'] as String? ?? '';
-      final albumName = albumMap['name'] as String? ?? '';
-      if (albumId.isEmpty) continue;
-      try {
-        final photoResp = await _dio.get('/albums/$albumId/photos');
-        final list = _parseList(photoResp.data, 'photos');
-        for (final e in list) {
-          final map = Map<String, dynamic>.from(e as Map);
-          // Inject albumName so the card badge shows the album name.
-          map.putIfAbsent('dayLabel', () => albumName);
-          allPhotos.add(PhotoModel.fromJson(map));
+    try {
+      final resp = await _dio.get('/projects/$projectId/feed/');
+      final posts = _parseList(resp.data, 'results');
+      
+      final allPhotos = <PhotoModel>[];
+      for (final post in posts) {
+        final postMap = post as Map<String, dynamic>;
+        
+        // Extract image URL from post (check both image_url and image fields)
+        // Allow null/empty image URLs for pending posts
+        final imageUrl = postMap['image_url'] as String? ?? 
+                        postMap['image'] as String? ?? '';
+        
+        // Parse uploadedAt timestamp
+        DateTime uploadedAt = DateTime.now();
+        final createdAtStr = postMap['created_at'] as String?;
+        if (createdAtStr != null) {
+          try {
+            uploadedAt = DateTime.parse(createdAtStr);
+          } catch (_) {
+            uploadedAt = DateTime.now();
+          }
         }
-      } catch (_) {
-        // Skip albums we can't access.
+        
+        // Extract moderation status
+        final moderationStatus = postMap['moderation_status'] as String? ?? 'APPROVED';
+        
+        // Convert post to PhotoModel
+        final photo = PhotoModel(
+          id: postMap['id']?.toString() ?? '',
+          imagePath: imageUrl,
+          caption: postMap['caption'] as String? ?? '',
+          employeeId: postMap['employee_id']?.toString() ?? '',
+          employeeName: postMap['employee_name'] as String? ?? 'Unknown',
+          dayLabel: postMap['day_label'] as String? ?? 'General',
+          uploadedAt: uploadedAt,
+          likeCount: postMap['like_count'] as int? ?? 0,
+          likedByCurrentUser: postMap['liked_by_current_user'] as bool? ?? false,
+          moderationStatus: moderationStatus,
+        );
+        allPhotos.add(photo);
       }
+      return allPhotos;
+    } catch (e) {
+      print('[GalleryRepository] Error fetching photos: $e');
+      rethrow;
     }
-    return allPhotos;
   }
 
   // ── Upload photo ──────────────────────────────────────────────────────────
 
-  /// Uploads [filePath] into the album called [albumName] (created if needed).
+  /// Uploads a post to the project feed.
+  ///
+  /// The API expects:
+  /// POST /api/projects/{project_id}/feed/
+  /// {
+  ///   "image_url": "https://example.com/photo.jpg",
+  ///   "caption": "Great kickoff session today!"
+  /// }
+  ///
+  /// At least one of image_url or caption is required.
   Future<PhotoModel> uploadPhoto({
     required String filePath,
     required String employeeId,
     required String employeeName,
     required String caption,
-    required String albumName,
   }) async {
-    final albumId = await _resolveAlbumId(albumName);
+    try {
+      // Send the image URL and caption as JSON to the feed endpoint
+      final response = await _dio.post(
+        '/projects/$projectId/feed/',
+        data: {
+          'image_url': filePath,
+          'caption': caption,
+        },
+      );
 
-    final formData = FormData.fromMap({
-      'file': await MultipartFile.fromFile(
-        filePath,
-        filename: filePath.split('/').last,
-      ),
-      'title': caption,       // server field for caption/title
-      'caption': caption,     // kept for backward compat
-      'dayLabel': albumName,
-      'employeeId': employeeId,
-      'employeeName': employeeName,
-    });
-
-    final response = await _dio.post(
-      '/albums/$albumId/photos',
-      data: formData,
-      options: Options(contentType: 'multipart/form-data'),
-    );
-
-    final photoData = _extractObject(response.data, 'photo');
-    photoData.putIfAbsent('albumId', () => albumId);
-    photoData.putIfAbsent('employeeId', () => employeeId);
-    photoData.putIfAbsent('employeeName', () => employeeName);
-    photoData.putIfAbsent('caption', () => caption);
-    photoData.putIfAbsent('dayLabel', () => albumName);
-    return PhotoModel.fromJson(photoData);
+      final postData = _extractObject(response.data, 'data');
+      
+      // Parse uploadedAt timestamp
+      DateTime uploadedAt = DateTime.now();
+      final createdAtStr = postData['created_at'] as String?;
+      if (createdAtStr != null) {
+        try {
+          uploadedAt = DateTime.parse(createdAtStr);
+        } catch (_) {
+          uploadedAt = DateTime.now();
+        }
+      }
+      
+      // Extract image URL from response
+      final responseImageUrl = postData['image_url'] as String? ?? 
+                              postData['image'] as String? ?? filePath;
+      
+      // Extract moderation status
+      final moderationStatus = postData['moderation_status'] as String? ?? 'PENDING';
+      
+      // Convert response to PhotoModel
+      final photo = PhotoModel(
+        id: postData['id']?.toString() ?? '',
+        imagePath: responseImageUrl,
+        caption: postData['caption'] as String? ?? caption,
+        employeeId: employeeId,
+        employeeName: employeeName,
+        dayLabel: 'General',
+        uploadedAt: uploadedAt,
+        likeCount: postData['like_count'] as int? ?? 0,
+        likedByCurrentUser: false,
+        moderationStatus: moderationStatus,
+      );
+      
+      return photo;
+    } catch (e) {
+      print('[GalleryRepository] Error uploading photo: $e');
+      rethrow;
+    }
   }
 
   // ── Delete photo ──────────────────────────────────────────────────────────
 
   /// Deletes [photoId] permanently. Only the uploader should call this.
   Future<void> deletePhoto(String photoId) async {
-    await _dio.delete('/photos/$photoId');
+    try {
+      await _dio.delete('/projects/$projectId/feed/$photoId/');
+    } catch (e) {
+      print('[GalleryRepository] Error deleting photo: $e');
+      rethrow;
+    }
   }
 
   // ── Like / Unlike ─────────────────────────────────────────────────────────
@@ -155,13 +163,13 @@ class GalleryRepository {
   /// A 409 (already liked) is handled gracefully.
   Future<Map<String, dynamic>> likePhoto(String photoId) async {
     try {
-      final resp = await _dio.post('/photos/$photoId/likes');
-      return _extractObject(resp.data, 'like');
+      final resp = await _dio.post('/projects/$projectId/feed/$photoId/like/');
+      return _extractObject(resp.data, 'data');
     } on DioException catch (e) {
       if (e.response?.statusCode == 409) {
         return {
           'photoId': photoId,
-          'likeCount': (e.response?.data as Map?)?['likeCount'] ?? 1,
+          'likeCount': (e.response?.data as Map?)?['like_count'] ?? 1,
           'likedByCurrentUser': true,
         };
       }
@@ -169,10 +177,35 @@ class GalleryRepository {
     }
   }
 
-  /// Unlikes [photoId] using DELETE /photos/{photoId}/likes.
+  /// Unlikes [photoId].
   Future<Map<String, dynamic>> unlikePhoto(String photoId) async {
-    final resp = await _dio.delete('/photos/$photoId/likes');
-    return _extractObject(resp.data, 'like');
+    try {
+      final resp = await _dio.delete('/projects/$projectId/feed/$photoId/like/');
+      return _extractObject(resp.data, 'data');
+    } catch (e) {
+      print('[GalleryRepository] Error unliking photo: $e');
+      rethrow;
+    }
+  }
+
+  // ── Moderation (Admin only) ────────────────────────────────────────────────
+
+  /// Moderates a post (Admin only).
+  /// [status] should be 'APPROVED' or 'REJECTED'
+  Future<Map<String, dynamic>> moderatePost(
+    String postId,
+    String status,
+  ) async {
+    try {
+      final resp = await _dio.patch(
+        '/projects/$projectId/feed/$postId/moderate/',
+        data: {'moderation_status': status},
+      );
+      return _extractObject(resp.data, 'data');
+    } catch (e) {
+      print('[GalleryRepository] Error moderating post: $e');
+      rethrow;
+    }
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

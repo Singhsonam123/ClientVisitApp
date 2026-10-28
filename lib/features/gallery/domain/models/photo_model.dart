@@ -11,6 +11,8 @@ class PhotoModel extends Equatable {
   final DateTime uploadedAt;
   final int likeCount;
   final bool likedByCurrentUser;
+  /// Moderation status: 'PENDING', 'APPROVED', 'REJECTED'
+  final String moderationStatus;
 
   const PhotoModel({
     required this.id,
@@ -22,7 +24,17 @@ class PhotoModel extends Equatable {
     required this.uploadedAt,
     this.likeCount = 0,
     this.likedByCurrentUser = false,
+    this.moderationStatus = 'APPROVED',
   });
+
+  /// Convenience getter for pending status
+  bool get isPending => moderationStatus.toUpperCase() == 'PENDING';
+
+  /// Convenience getter for approved status
+  bool get isApproved => moderationStatus.toUpperCase() == 'APPROVED';
+
+  /// Convenience getter for rejected status
+  bool get isRejected => moderationStatus.toUpperCase() == 'REJECTED';
 
   /// Construct from MongoDB API response JSON.
   factory PhotoModel.fromJson(Map<String, dynamic> json) {
@@ -44,6 +56,7 @@ class PhotoModel extends Equatable {
           : DateTime.now(),
       likeCount: json['likeCount'] as int? ?? 0,
       likedByCurrentUser: json['likedByCurrentUser'] as bool? ?? false,
+      moderationStatus: json['moderation_status'] as String? ?? 'APPROVED',
     );
   }
 
@@ -51,6 +64,7 @@ class PhotoModel extends Equatable {
   PhotoModel copyWith({
     int? likeCount,
     bool? likedByCurrentUser,
+    String? moderationStatus,
   }) {
     return PhotoModel(
       id: id,
@@ -62,11 +76,12 @@ class PhotoModel extends Equatable {
       uploadedAt: uploadedAt,
       likeCount: likeCount ?? this.likeCount,
       likedByCurrentUser: likedByCurrentUser ?? this.likedByCurrentUser,
+      moderationStatus: moderationStatus ?? this.moderationStatus,
     );
   }
 
   @override
   List<Object?> get props =>
       [id, employeeId, imagePath, caption, dayLabel, uploadedAt,
-       likeCount, likedByCurrentUser];
+       likeCount, likedByCurrentUser, moderationStatus];
 }
