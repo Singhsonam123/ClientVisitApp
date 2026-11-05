@@ -164,12 +164,12 @@ class _LoginPageState extends State<LoginPage> {
                         .fadeIn(delay: 200.ms, duration: 600.ms)
                         .slideY(begin: 0.3),
                     const SizedBox(height: 8),
-                    Text(AppConstants.eventName,
-                            style: AppTextStyles.bodyMedium.copyWith(
-                                color: Colors.white.withValues(alpha: 0.8)),
-                            textAlign: TextAlign.center)
-                        .animate()
-                        .fadeIn(delay: 400.ms, duration: 600.ms),
+                    // Text(AppConstants.eventName,
+                    //         style: AppTextStyles.bodyMedium.copyWith(
+                    //             color: Colors.white.withValues(alpha: 0.8)),
+                    //         textAlign: TextAlign.center)
+                    //     .animate()
+                    //     .fadeIn(delay: 400.ms, duration: 600.ms),
                     const SizedBox(height: 32),
 
                     // Form card — animated once on mount, not on state change
@@ -270,24 +270,24 @@ class _LoginPageState extends State<LoginPage> {
                     const SizedBox(height: 24),
 
                     // Sign Up link
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text("Don't have an account?",
-                            style: AppTextStyles.bodySmall.copyWith(
-                                color: Colors.white.withValues(alpha: 0.8))),
-                        TextButton(
-                          onPressed: _isLoading ? null : _goToSignup,
-                          child: const Text(
-                            'Sign Up',
-                            style: TextStyle(
-                              color: AppColors.gold,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ).animate().fadeIn(delay: 700.ms, duration: 600.ms),
+                    // Row(
+                    //   mainAxisAlignment: MainAxisAlignment.center,
+                    //   children: [
+                    //     Text("Don't have an account?",
+                    //         style: AppTextStyles.bodySmall.copyWith(
+                    //             color: Colors.white.withValues(alpha: 0.8))),
+                    //     TextButton(
+                    //       onPressed: _isLoading ? null : _goToSignup,
+                    //       child: const Text(
+                    //         'Sign Up',
+                    //         style: TextStyle(
+                    //           color: AppColors.gold,
+                    //           fontWeight: FontWeight.bold,
+                    //         ),
+                    //       ),
+                    //     ),
+                    //   ],
+                    // ).animate().fadeIn(delay: 700.ms, duration: 600.ms),
                   ],
                 ),
               ),

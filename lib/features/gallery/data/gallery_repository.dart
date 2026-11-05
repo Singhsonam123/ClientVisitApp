@@ -35,9 +35,14 @@ class GalleryRepository {
       for (final post in posts) {
         final postMap = post as Map<String, dynamic>;
         
+        // Extract uploader details from nested uploader_detail object
+        final uploaderDetail = postMap['uploader_detail'] as Map<String, dynamic>? ?? {};
+        final userId = uploaderDetail['user_id']?.toString() ?? postMap['uploader']?.toString() ?? '';
+        final fullName = uploaderDetail['full_name'] as String? ?? 'Unknown';
+        
         // Extract image URL from post (check both image_url and image fields)
         // Allow null/empty image URLs for pending posts
-        final imageUrl = postMap['image_url'] as String? ?? 
+        final imageUrl = postMap['image_url'] as String? ??
                         postMap['image'] as String? ?? '';
         
         // Parse uploadedAt timestamp
@@ -54,14 +59,18 @@ class GalleryRepository {
         // Extract moderation status
         final moderationStatus = postMap['moderation_status'] as String? ?? 'APPROVED';
         
+        // Extract project ID from response
+        final photoProjectId = postMap['project']?.toString() ?? projectId;
+        
         // Convert post to PhotoModel
         final photo = PhotoModel(
-          id: postMap['id']?.toString() ?? '',
+          id: postMap['post_id']?.toString() ?? '',
+          projectId: photoProjectId,
           imagePath: imageUrl,
           caption: postMap['caption'] as String? ?? '',
-          employeeId: postMap['employee_id']?.toString() ?? '',
-          employeeName: postMap['employee_name'] as String? ?? 'Unknown',
-          dayLabel: postMap['day_label'] as String? ?? 'General',
+          employeeId: userId,
+          employeeName: fullName,
+          dayLabel: 'General',
           uploadedAt: uploadedAt,
           likeCount: postMap['like_count'] as int? ?? 0,
           likedByCurrentUser: postMap['liked_by_current_user'] as bool? ?? false,
@@ -80,14 +89,12 @@ class GalleryRepository {
 
   /// Uploads a post to the project feed.
   ///
-  /// The API expects:
+  /// The API expects multipart/form-data:
   /// POST /api/projects/{project_id}/feed/
-  /// {
-  ///   "image_url": "https://example.com/photo.jpg",
-  ///   "caption": "Great kickoff session today!"
-  /// }
+  /// - image: File (multipart)
+  /// - caption: String (form field)
   ///
-  /// At least one of image_url or caption is required.
+  /// At least one of image or caption is required.
   Future<PhotoModel> uploadPhoto({
     required String filePath,
     required String employeeId,
@@ -95,16 +102,31 @@ class GalleryRepository {
     required String caption,
   }) async {
     try {
-      // Send the image URL and caption as JSON to the feed endpoint
+      // Create multipart form data with the image file
+      final formData = FormData.fromMap({
+        'image': await MultipartFile.fromFile(
+          filePath,
+          filename: filePath.split('/').last,
+        ),
+        'caption': caption,
+      });
+
+      // Send the multipart form data to the feed endpoint
+      // Note: Don't set Content-Type header - Dio will set it automatically to multipart/form-data
       final response = await _dio.post(
         '/projects/$projectId/feed/',
-        data: {
-          'image_url': filePath,
-          'caption': caption,
-        },
+        data: formData,
+        options: Options(
+          contentType: 'multipart/form-data',
+        ),
       );
 
       final postData = _extractObject(response.data, 'data');
+      
+      // Extract uploader details from nested uploader_detail object
+      final uploaderDetail = postData['uploader_detail'] as Map<String, dynamic>? ?? {};
+      final userId = uploaderDetail['user_id']?.toString() ?? postData['uploader']?.toString() ?? employeeId;
+      final fullName = uploaderDetail['full_name'] as String? ?? employeeName;
       
       // Parse uploadedAt timestamp
       DateTime uploadedAt = DateTime.now();
@@ -118,19 +140,23 @@ class GalleryRepository {
       }
       
       // Extract image URL from response
-      final responseImageUrl = postData['image_url'] as String? ?? 
+      final responseImageUrl = postData['image_url'] as String? ??
                               postData['image'] as String? ?? filePath;
       
       // Extract moderation status
       final moderationStatus = postData['moderation_status'] as String? ?? 'PENDING';
       
+      // Extract project ID from response
+      final photoProjectId = postData['project']?.toString() ?? projectId;
+      
       // Convert response to PhotoModel
       final photo = PhotoModel(
-        id: postData['id']?.toString() ?? '',
+        id: postData['post_id']?.toString() ?? '',
+        projectId: photoProjectId,
         imagePath: responseImageUrl,
         caption: postData['caption'] as String? ?? caption,
-        employeeId: employeeId,
-        employeeName: employeeName,
+        employeeId: userId,
+        employeeName: fullName,
         dayLabel: 'General',
         uploadedAt: uploadedAt,
         likeCount: postData['like_count'] as int? ?? 0,

@@ -2,6 +2,7 @@ import 'package:equatable/equatable.dart';
 
 class PhotoModel extends Equatable {
   final String id;
+  final String projectId;
   final String employeeId;
   final String employeeName;
   /// For local photos this is the file path; for server photos this is the URL.
@@ -16,6 +17,7 @@ class PhotoModel extends Equatable {
 
   const PhotoModel({
     required this.id,
+    required this.projectId,
     required this.employeeId,
     required this.employeeName,
     required this.imagePath,
@@ -40,6 +42,7 @@ class PhotoModel extends Equatable {
   factory PhotoModel.fromJson(Map<String, dynamic> json) {
     return PhotoModel(
       id: json['_id'] as String? ?? json['id'] as String? ?? '',
+      projectId: json['project'] as String? ?? '',
       employeeId: json['employeeId'] as String? ?? '',
       employeeName: json['employeeName'] as String? ?? '',
       // Priority: imageUrl → url → imagePath (handles all API shape variants)
@@ -68,6 +71,7 @@ class PhotoModel extends Equatable {
   }) {
     return PhotoModel(
       id: id,
+      projectId: projectId,
       employeeId: employeeId,
       employeeName: employeeName,
       imagePath: imagePath,
@@ -82,6 +86,6 @@ class PhotoModel extends Equatable {
 
   @override
   List<Object?> get props =>
-      [id, employeeId, imagePath, caption, dayLabel, uploadedAt,
+      [id, projectId, employeeId, imagePath, caption, dayLabel, uploadedAt,
        likeCount, likedByCurrentUser, moderationStatus];
 }

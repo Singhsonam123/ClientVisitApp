@@ -1,17 +1,118 @@
 # Active Context
 
 ## Current Status
-**Gallery Upload Button - EMPLOYEE Role Only.** Upload button now visible exclusively to EMPLOYEE role users, hidden from ADMIN and SUPER_ADMIN roles.
+**Gallery Moderation UI - Complete Fix with ProjectId in API Call.** Admin users can now successfully approve or reject pending photos with proper API calls including project ID.
 
 ## What Was Just Completed (This Session)
 
-### Gallery Upload Button - EMPLOYEE Role Visibility
-- Updated [`lib/features/gallery/presentation/pages/gallery_page.dart`](lib/features/gallery/presentation/pages/gallery_page.dart:341-370):
-  - Added import: `import '../../../auth/domain/models/employee_model.dart'` for `UserRole` enum
-  - Changed role check from `!isAdmin` to `isEmployee` (lines 344-345)
-  - Now checks: `authState.employee.role == UserRole.employee`
-  - Upload FAB now visible **only to EMPLOYEE role**, hidden from ADMIN and SUPER_ADMIN
-  - Flutter analyze: **zero errors** (16 pre-existing info warnings only)
+### Gallery Moderation - Final Implementation with ProjectId Parameter
+- **Problem**: When admin clicked approve/reject button, got error: "Could not find the correct Provider<GalleryRepository> above this _PhotoCard Widget"
+- **Root Cause**: `_moderatePhoto()` method was trying to access `GalleryRepository` directly via `context.read<GalleryRepository>()`, but the repository was not provided in the widget tree
+- **Solution**: Use `GalleryBloc` to dispatch moderation events with projectId parameter, which internally calls the repository's `moderatePost()` method
+
+### Changes Made
+
+**File: [`lib/features/gallery/presentation/bloc/gallery_bloc.dart`](lib/features/gallery/presentation/bloc/gallery_bloc.dart)**
+- Updated `GalleryPhotoModerationRequested` event to include `projectId` parameter:
+  ```dart
+  class GalleryPhotoModerationRequested extends GalleryEvent {
+    final String projectId;
+    final String photoId;
+    final String status; // 'APPROVED' or 'REJECTED'
+    const GalleryPhotoModerationRequested({
+      required this.projectId,
+      required this.photoId,
+      required this.status,
+    });
+    @override
+    List<Object?> get props => [projectId, photoId, status];
+  }
+  ```
+- Added public getter to expose projectId:
+  ```dart
+  String get projectId => _projectId;
+  ```
+
+**File: [`lib/features/gallery/presentation/pages/gallery_page.dart`](lib/features/gallery/presentation/pages/gallery_page.dart)**
+- Removed import of `GalleryRepository` (no longer needed)
+- Refactored `_moderatePhoto()` method to:
+  1. Get GalleryBloc instance
+  2. Dispatch `GalleryPhotoModerationRequested` event with projectId from bloc
+  3. Show success snackbar with message "Photo {status} successfully"
+  4. Handle errors with try-catch and show error snackbar
+  ```dart
+  Future<void> _moderatePhoto(BuildContext context, String photoId, String status) async {
+    try {
+      final galleryBloc = context.read<GalleryBloc>();
+      
+      // Dispatch moderation event to GalleryBloc with projectId
+      galleryBloc.add(
+        GalleryPhotoModerationRequested(
+          projectId: galleryBloc.projectId,
+          photoId: photoId,
+          status: status,
+        ),
+      );
+      
+      // Show success snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Row(...),
+              backgroundColor: status == 'APPROVED' ? Colors.green.shade700 : Colors.red.shade700,
+              duration: const Duration(seconds: 3),
+            ),
+          );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Row(...),
+              backgroundColor: Colors.red.shade700,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+      }
+    }
+  }
+  ```
+
+### API Flow
+1. Admin clicks approve/reject button on pending photo
+2. `_ModerationMenu.onSelected()` calls `_moderatePhoto(context, photoId, status)`
+3. `_moderatePhoto()` dispatches `GalleryPhotoModerationRequested` event with projectId to `GalleryBloc`
+4. `GalleryBloc._onModerate()` handler:
+   - Calls `_repository.moderatePost(photoId, status)`
+   - Repository makes PATCH request to `/projects/{projectId}/feed/{photoId}/moderate/`
+   - Request body: `{ "moderation_status": "APPROVED" }` or `{ "moderation_status": "REJECTED" }`
+   - Re-fetches photos from server
+   - Emits `GalleryLoaded` state with updated photos
+5. UI shows success snackbar and automatically updates via BLoC state changes
+
+### Implementation Details
+- **API Endpoint**: `PATCH /api/projects/{project_id}/feed/{post_id}/moderate/`
+- **URL Format**: Correctly includes both `{project_id}` and `{post_id}` in path
+- **Request Format**: `{ "moderation_status": "APPROVED" | "REJECTED" }`
+- **Response Handling**: Repository extracts response data via `_extractObject(resp.data, 'data')`
+- **UI Feedback**: Success snackbar shows "Photo approved successfully" or "Photo rejected successfully"
+- **Error Handling**: Errors are caught and displayed in red error snackbar
+- **Gallery Refresh**: After moderation, gallery automatically refreshes to show updated photo status
+- **Flutter analyze**: **zero errors** (9 pre-existing info warnings only)
+
+### Previous: Gallery Moderation Menu - Three-Dot Icon (Initial Implementation)
+- Added three-dot menu icon (`PopupMenuButton`) positioned on pending photos (top-right, below like button)
+- Menu appears **only for ADMIN/SUPER_ADMIN roles** on **pending photos only**
+- Menu options: "Approve" (green checkmark) and "Reject" (red X)
+- Fixed role comparison to use `UserRole.admin` and `UserRole.superAdmin` enum values
+- Removed old moderation buttons that were displayed below photo captions
+- Used `const` constructors to optimize performance
+
+### Previous: Gallery Upload Button - EMPLOYEE Role Visibility
 
 ### Previous: Gallery Filter Chips & Rejected Status Support
 - Updated [`lib/features/gallery/domain/models/photo_model.dart`](lib/features/gallery/domain/models/photo_model.dart):

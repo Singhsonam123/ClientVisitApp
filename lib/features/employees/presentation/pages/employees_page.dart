@@ -571,10 +571,10 @@ class _EmployeesPageState extends State<EmployeesPage> {
                       _filteredEmployees = employees;
                     }
 
-                    // Only show "No employees found" if API returned successfully with empty list
+                   // Only show "No employees found" if API returned successfully with empty list
                     if (employees.isEmpty && snapshot.hasData) {
-                      return Padding(
-                        padding: const EdgeInsets.all(16),
+                      return SizedBox(
+                        height: MediaQuery.of(context).size.height * 0.6,
                         child: Center(
                           child: Column(
                             mainAxisAlignment: MainAxisAlignment.center,
@@ -587,7 +587,7 @@ class _EmployeesPageState extends State<EmployeesPage> {
                               const SizedBox(height: 16),
                               Text(
                                 'No employees found',
-                                style: AppTextStyles.headlineSmall,
+                                style: AppTextStyles.titleSmall,
                               ),
                               const SizedBox(height: 24),
                               ElevatedButton(
@@ -631,28 +631,21 @@ class _EmployeesPageState extends State<EmployeesPage> {
                         ),
                         // Employee list
                         if (_filteredEmployees.isEmpty && _searchController.text.isNotEmpty)
-                          Padding(
-                            padding: const EdgeInsets.all(16),
+                          SizedBox(
+                            height: MediaQuery.of(context).size.height * 0.5,
                             child: Center(
                               child: Column(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: [
                                   Icon(
-                                    Icons.search_off,
+                                    Icons.search,
                                     size: 64,
                                     color: AppColors.textHint,
                                   ),
                                   const SizedBox(height: 16),
                                   Text(
-                                    'No employees found',
+                                    'No data found',
                                     style: AppTextStyles.headlineSmall,
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Try searching with different keywords',
-                                    style: AppTextStyles.bodySmall.copyWith(
-                                      color: AppColors.textHint,
-                                    ),
                                   ),
                                 ],
                               ),

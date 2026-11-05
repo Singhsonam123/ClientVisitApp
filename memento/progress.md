@@ -14,6 +14,7 @@
 - [x] Sweets page — QR scanner reveals sweet details
 - [x] Gallery page — grid view with day-filter chips, upload FAB (EMPLOYEE role only)
 - [x] Gallery page — upload button visible only to EMPLOYEE role, hidden from ADMIN/SUPER_ADMIN
+- [x] Gallery page — three-dot menu on pending photos for ADMIN/SUPER_ADMIN to approve/reject
 - [x] Gallery page — three sections: "Pending Approval" (orange), "Approved" (green), "Rejected" (red)
 - [x] Gallery page — filter chips at top showing counts for each status (All, Approved, Pending, Rejected)
 - [x] Gallery page — captions displayed below images with employee name

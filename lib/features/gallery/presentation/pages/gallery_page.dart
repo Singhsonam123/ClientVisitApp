@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -11,7 +12,6 @@ import '../../../auth/presentation/bloc/auth_bloc.dart';
 import '../../../auth/domain/models/employee_model.dart';
 import '../bloc/gallery_bloc.dart';
 import '../../domain/models/photo_model.dart';
-import '../../data/gallery_repository.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Shared image builder
@@ -538,41 +538,130 @@ class _GalleryPageState extends State<GalleryPage> {
     return map;
   }
 
-  Future<void> _moderatePhoto(BuildContext context, String photoId, String status) async {
-    try {
-      final galleryRepo = context.read<GalleryRepository>();
-      await galleryRepo.moderatePost(photoId, status);
-      
-      // Refresh gallery after moderation
-      if (mounted) {
-        context.read<GalleryBloc>().add(const GalleryLoadRequested());
-        
-        ScaffoldMessenger.of(context)
-          ..hideCurrentSnackBar()
-          ..showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle_rounded,
-                      color: Colors.white, size: 20),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Photo ${status.toLowerCase()}',
-                      style: const TextStyle(color: Colors.white),
-                    ),
-                  ),
-                ],
+  Future<void> _moderatePhoto(BuildContext context, PhotoModel photo, String status) async {
+    if (!mounted) return;
+    
+    // Show loading dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => Dialog(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const SizedBox(
+                width: 50,
+                height: 50,
+                child: CircularProgressIndicator(strokeWidth: 3),
               ),
-              backgroundColor: status == 'APPROVED' ? Colors.green.shade700 : Colors.red.shade700,
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 3),
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12)),
-            ),
-          );
-      }
+              const SizedBox(height: 16),
+              Text(
+                'Processing...',
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    try {
+      final galleryBloc = context.read<GalleryBloc>();
+      
+      // Listen to bloc state changes to know when gallery is reloaded
+      bool galleryReloaded = false;
+      late StreamSubscription<GalleryState> subscription;
+      
+      subscription = galleryBloc.stream.listen((state) {
+        if (state is GalleryLoaded && !galleryReloaded) {
+          galleryReloaded = true;
+          subscription.cancel();
+          
+          // Close the loading dialog after gallery is reloaded
+          if (mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+          
+          // Show success snackbar
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.check_circle_rounded,
+                          color: Colors.white, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Photo ${status.toLowerCase()} successfully',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: status == 'APPROVED' ? Colors.green.shade700 : Colors.red.shade700,
+                  duration: const Duration(seconds: 3),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+          }
+        } else if (state is GalleryError && !galleryReloaded) {
+          galleryReloaded = true;
+          subscription.cancel();
+          
+          // Close the loading dialog on error
+          if (mounted && Navigator.of(context).canPop()) {
+            Navigator.of(context).pop();
+          }
+          
+          // Show error message
+          if (mounted) {
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                SnackBar(
+                  content: Row(
+                    children: [
+                      const Icon(Icons.error_outline_rounded,
+                          color: Colors.white, size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Error: ${state.message}',
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                  backgroundColor: Colors.red.shade700,
+                  duration: const Duration(seconds: 4),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
+                ),
+              );
+          }
+        }
+      });
+      
+      // Dispatch moderation event to GalleryBloc with projectId from photo
+      galleryBloc.add(
+        GalleryPhotoModerationRequested(
+          projectId: photo.projectId,
+          photoId: photo.id,
+          status: status,
+        ),
+      );
     } catch (e) {
+      // Close the loading dialog
+      if (mounted && Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+      
       if (mounted) {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
@@ -592,7 +681,6 @@ class _GalleryPageState extends State<GalleryPage> {
                 ],
               ),
               backgroundColor: Colors.red.shade700,
-              behavior: SnackBarBehavior.floating,
               duration: const Duration(seconds: 4),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12)),
@@ -762,14 +850,14 @@ class _StatusSectionHeader extends StatelessWidget {
                       letterSpacing: 0.3,
                     ),
                   ),
-                  Text(
-                    '$count photo${count == 1 ? '' : 's'} awaiting review',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      color: statusColor.withOpacity(0.7),
-                    ),
-                  ),
+                  // Text(
+                  //   '$count photo${count == 1 ? '' : 's'} awaiting review',
+                  //   style: TextStyle(
+                  //     fontSize: 12,
+                  //     fontWeight: FontWeight.w500,
+                  //     color: statusColor.withOpacity(0.7),
+                  //   ),
+                  // ),
                 ],
               ),
             ),
@@ -878,16 +966,16 @@ class _MostLikedBanner extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 // Uploader · Album
-                Text(
-                  '${photo.employeeName} · $albumLabel',
-                  style: TextStyle(
-                    color: Colors.white.withOpacity(0.85),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+                // Text(
+                //   '${photo.employeeName} · $albumLabel',
+                //   style: TextStyle(
+                //     color: Colors.white.withOpacity(0.85),
+                //     fontSize: 11,
+                //     fontWeight: FontWeight.w500,
+                //   ),
+                //   maxLines: 1,
+                //   overflow: TextOverflow.ellipsis,
+                // ),
               ],
             ),
           ),
@@ -1044,6 +1132,20 @@ class _PhotoCard extends StatelessWidget {
                       right: 8,
                       child: _LikeButton(photo: photo, mini: true),
                     ),
+
+                    // Three-dot menu for ADMIN moderation (top-right, below like button)
+                    if (_isAdminAndPending(context))
+                      Positioned(
+                        top: 50,
+                        right: 8,
+                        child: _ModerationMenu(
+                          photo: photo,
+                          onModerate: (status) {
+                            final pageState = context.findAncestorStateOfType<_GalleryPageState>();
+                            pageState?._moderatePhoto(context, photo, status);
+                          },
+                        ),
+                      ),
                   ],
                 ),
               ),
@@ -1073,94 +1175,20 @@ class _PhotoCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
-          
-          // ── Moderation buttons for ADMIN on pending photos ────────────────
-          if (photo.isPending)
-            BlocBuilder<AuthBloc, AuthState>(
-              builder: (ctx, authState) {
-                final isAdmin = authState is AuthAuthenticated &&
-                    (authState.employee.role == 'ADMIN' ||
-                        authState.employee.role == 'SUPER_ADMIN');
-                
-                if (!isAdmin) return const SizedBox.shrink();
-                
-                return Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.orange.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.orange.withOpacity(0.3), width: 1),
-                        ),
-                        child: const Text(
-                          'Pending Review',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.orange,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              icon: const Icon(Icons.check_rounded, size: 16),
-                              label: const Text('Approve', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.green,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                elevation: 2,
-                              ),
-                              onPressed: () {
-                                final pageState = ctx.findAncestorStateOfType<_GalleryPageState>();
-                                pageState?._moderatePhoto(ctx, photo.id, 'APPROVED');
-                              },
-                            ),
-                          ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: ElevatedButton.icon(
-                              icon: const Icon(Icons.close_rounded, size: 16),
-                              label: const Text('Reject', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.red,
-                                foregroundColor: Colors.white,
-                                padding: const EdgeInsets.symmetric(vertical: 8),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                elevation: 2,
-                              ),
-                              onPressed: () {
-                                final pageState = ctx.findAncestorStateOfType<_GalleryPageState>();
-                                pageState?._moderatePhoto(ctx, photo.id, 'REJECTED');
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
         ],
       ),
     );
   }
 
   // ── Full-screen dialog ───────────────────────────────────────────────────
+
+  bool _isAdminAndPending(BuildContext context) {
+    final authState = context.read<AuthBloc>().state;
+    return authState is AuthAuthenticated &&
+        (authState.employee.role == UserRole.admin ||
+            authState.employee.role == UserRole.superAdmin) &&
+        photo.isPending;
+  }
 
   void _showFullScreen(BuildContext context) {
     final galleryBloc = context.read<GalleryBloc>();
@@ -1244,6 +1272,63 @@ class _PhotoCard extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _ModerationMenu — Three-dot menu for ADMIN to approve/reject pending photos
+// ─────────────────────────────────────────────────────────────────────────────
+
+class _ModerationMenu extends StatelessWidget {
+  final PhotoModel photo;
+  final Function(String) onModerate;
+
+  const _ModerationMenu({
+    required this.photo,
+    required this.onModerate,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return PopupMenuButton<String>(
+      icon: Container(
+        padding: const EdgeInsets.all(6),
+        decoration: const BoxDecoration(
+          color: Color.fromARGB(153, 0, 0, 0),
+          shape: BoxShape.circle,
+        ),
+        child: const Icon(
+          Icons.more_vert_rounded,
+          color: Colors.white,
+          size: 10,
+        ),
+      ),
+      onSelected: (value) {
+        onModerate(value);
+      },
+      itemBuilder: (BuildContext context) => const [
+        PopupMenuItem<String>(
+          value: 'APPROVED',
+          child: Row(
+            children: [
+              Icon(Icons.check_rounded, color: Colors.green, size: 18),
+              SizedBox(width: 8),
+              Text('Approve'),
+            ],
+          ),
+        ),
+        PopupMenuItem<String>(
+          value: 'REJECTED',
+          child: Row(
+            children: [
+              Icon(Icons.close_rounded, color: Colors.red, size: 18),
+              SizedBox(width: 8),
+              Text('Reject'),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

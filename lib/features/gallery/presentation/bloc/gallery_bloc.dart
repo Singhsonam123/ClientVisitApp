@@ -66,14 +66,16 @@ class GalleryPhotoDeleteRequested extends GalleryEvent {
 
 /// Event to moderate a post (Admin only)
 class GalleryPhotoModerationRequested extends GalleryEvent {
+  final String projectId;
   final String photoId;
   final String status; // 'APPROVED' or 'REJECTED'
   const GalleryPhotoModerationRequested({
+    required this.projectId,
     required this.photoId,
     required this.status,
   });
   @override
-  List<Object?> get props => [photoId, status];
+  List<Object?> get props => [projectId, photoId, status];
 }
 
 // ── States ────────────────────────────────────────────────────────────────────
@@ -153,6 +155,9 @@ class GalleryBloc extends Bloc<GalleryEvent, GalleryState> {
     on<GalleryProjectIdUpdated>(_onProjectIdUpdated);
     on<GalleryPhotoModerationRequested>(_onModerate);
   }
+
+  /// Getter to access the project ID
+  String get projectId => _projectId;
 
   /// Updates the repository when project ID changes
   Future<void> _onProjectIdUpdated(
